@@ -1,26 +1,34 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* Configure system fonts for mobile app */
+@theme {
+  /* Sans-serif font stack optimized for mobile */
+  --font-family-sans: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    Roboto, 'Helvetica Neue', Arial, sans-serif;
+  
+  /* Monospace font stack */
+  --font-family-mono: 'SF Mono', Monaco, 'Inconsolata', 'Roboto Mono',
+    'Source Code Pro', monospace;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* Base styles for mobile optimization */
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  
+  body {
+    font-family: var(--font-family-sans);
+    line-height: 1.5;
+  }
+  
+  /* Touch-friendly tap targets */
+  button, 
+  input, 
+  select, 
+  textarea {
+    touch-action: manipulation;
+  }
 }
