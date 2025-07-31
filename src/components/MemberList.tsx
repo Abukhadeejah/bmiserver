@@ -1,16 +1,28 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 interface MemberListProps {
   members: any[];
   onSelectMember: (member: any) => void;
   onAddMember: () => void;
   onEditMember: (member: any) => void;
+  onUploadImage?: () => void;
 }
 
-export default function MemberList({ members, onSelectMember, onAddMember, onEditMember }: MemberListProps) {
+export default function MemberList({ members, onSelectMember, onAddMember, onEditMember, onUploadImage }: MemberListProps) {
   const [searchTerm, setSearchTerm] = useState('');
+  const [userRole, setUserRole] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Check if user is logged in and get their role
+    const isLoggedIn = localStorage.getItem('isLoggedIn');
+    const role = localStorage.getItem('userRole');
+    
+    if (isLoggedIn === 'true' && role) {
+      setUserRole(role);
+    }
+  }, []);
 
   const filteredMembers = members.filter((member: any) =>
     member.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -48,6 +60,21 @@ export default function MemberList({ members, onSelectMember, onAddMember, onEdi
           <span>Add New Member</span>
         </div>
       </button>
+
+      {/* Upload Image Button - Only show for admin */}
+      {(userRole === 'admin' || userRole === 'ADMIN') && onUploadImage && (
+        <button
+          onClick={onUploadImage}
+          className="w-full bg-blue-500 hover:bg-blue-600 text-white py-4 px-6 rounded-2xl font-semibold text-lg shadow-lg transition-all duration-200 active:scale-98"
+        >
+          <div className="flex items-center justify-center space-x-2">
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            <span>Upload Marketing Image</span>
+          </div>
+        </button>
+      )}
 
       {/* Members List */}
       <div className="space-y-3">

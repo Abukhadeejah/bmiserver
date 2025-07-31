@@ -19,6 +19,33 @@ async function main() {
   
   console.log('✅ Admin user created: admin/admin123');
   
+  // Create UserPass entries for Admin and Staff
+  await prisma.userPass.upsert({
+    where: { username: 'admin' },
+    update: {},
+    create: {
+      username: 'admin',
+      password: 'admin123',
+      role: 'admin',
+      isActive: true
+    }
+  });
+  
+  await prisma.userPass.upsert({
+    where: { username: 'staff' },
+    update: {},
+    create: {
+      username: 'staff',
+      password: 'staff123',
+      role: 'staff',
+      isActive: true
+    }
+  });
+  
+  console.log('✅ UserPass entries created:');
+  console.log('   - Admin: admin/admin123');
+  console.log('   - Staff: staff/staff123');
+  
   // Create sample members matching your data
   await prisma.member.upsert({
     where: { memberId: 'M001' },

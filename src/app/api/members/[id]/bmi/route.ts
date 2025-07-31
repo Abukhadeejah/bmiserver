@@ -26,7 +26,8 @@ export async function POST(
       muscleMass,
       restingMetabolism,
       biologicalAge,
-      healthConclusion
+      healthConclusion,
+      uploadedImageInfo
     } = await request.json();
     
     // Calculate BMI
@@ -69,12 +70,26 @@ export async function POST(
       }
     });
     
-    // Send notifications
+     // Update member to existing customer if not already
+     await prisma.member.update({
+      where: { id: memberId },
+      data: { customerType: 'existing' }
+    });
+
+    // Send notifications with uploaded image info if available
+    if (uploadedImageInfo) {
+      // Store uploaded image info in the notification context
+      process.env.UPLOADED_IMAGE_INFO = JSON.stringify(uploadedImageInfo);
+    }
+    
     sendNotifications(bmiRecord).catch(console.error);
+    
+    // Clear the environment variable after notifications
+    delete process.env.UPLOADED_IMAGE_INFO;
     
     return NextResponse.json(bmiRecord);
   } catch (error) {
-    console.error('BMI recording error:', error);
+    console.error('BMI recording error');
     return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
 }

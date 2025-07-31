@@ -37,7 +37,7 @@ export default function AddMember({ onMemberAdded }: AddMemberProps) {
         onMemberAdded();
       }
     } catch (error) {
-      console.error('Error adding member:', error);
+      console.error('Error adding member');
       alert('Failed to add member');
     } finally {
       setIsLoading(false);

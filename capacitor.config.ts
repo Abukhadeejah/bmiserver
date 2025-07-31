@@ -1,7 +1,7 @@
 import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.appopoleis.bmitracker',
+  appId: 'com.bmitracker.app',
   appName: 'BMI Tracker',
   webDir: 'out',
   server: {
@@ -18,6 +18,13 @@ const config: CapacitorConfig = {
       showSpinner: false
     }
   },
+  android: {
+    buildOptions: {
+      keystorePath: undefined,
+      keystoreAlias: undefined,
+      keystorePassword: undefined,
+    }
+  }
 };
 
 export default config;

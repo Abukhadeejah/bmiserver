@@ -24,6 +24,7 @@ export default function BMICalculator({ member, onSave }: BMICalculatorProps) {
   });
   const [unit, setUnit] = useState('metric');
   const [isLoading, setIsLoading] = useState(false);
+  // Remove showToast state
 
   const calculateBMI = () => {
     if (!formData.height || !formData.weight) return 0;
@@ -64,6 +65,17 @@ export default function BMICalculator({ member, onSave }: BMICalculatorProps) {
         weightInKg = weightInKg * 0.453592;
       }
       
+      // Get uploaded image info from localStorage
+      let uploadedImageInfo = null;
+      try {
+        const storedInfo = localStorage.getItem('uploadedImageInfo');
+        if (storedInfo) {
+          uploadedImageInfo = JSON.parse(storedInfo);
+        }
+      } catch (e) {
+        // No uploaded image info found
+      }
+      
       const response = await fetch(`/api/members/${member.id}/bmi`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -79,16 +91,19 @@ export default function BMICalculator({ member, onSave }: BMICalculatorProps) {
           muscleMass: formData.muscleMass,
           restingMetabolism: formData.restingMetabolism,
           biologicalAge: formData.biologicalAge,
-          healthConclusion: formData.healthConclusion
+          healthConclusion: formData.healthConclusion,
+          uploadedImageInfo
         })
       });
       
       if (response.ok) {
         const result = await response.json();
         onSave(result);
+        // Remove setShowToast(true);
+        // Remove setTimeout(() => setShowToast(false), 3500);
       }
     } catch (error) {
-      console.error('Error saving BMI:', error);
+      console.error('Error saving BMI');
       alert('Failed to save BMI data');
     } finally {
       setIsLoading(false);
@@ -100,6 +115,13 @@ export default function BMICalculator({ member, onSave }: BMICalculatorProps) {
 
   return (
     <div className="space-y-4">
+      {/* Toast Notification */}
+      {/* Remove showToast && ( */}
+        {/* <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50 bg-green-600 text-white px-6 py-4 rounded-2xl shadow-lg flex items-center space-x-3 animate-fade-in"> */}
+          {/* <svg className="w-6 h-6 text-white mr-2" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg> */}
+          {/* <span className="font-semibold text-lg">✅ Report sent successfully!</span> */}
+        {/* </div> */}
+      {/* ) */}
       {/* Member Info Card */}
       <div className="bg-white rounded-xl shadow-sm p-6">
         <div className="text-center">

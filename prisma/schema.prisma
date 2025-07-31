@@ -75,3 +75,13 @@ model AdminUser {
   role         String @default("admin")
   createdAt    DateTime @default(now())
 }
+
+model UserPass {
+  id           Int      @id @default(autoincrement())
+  username     String   @unique
+  password     String
+  role         String   // "admin" or "staff"
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}

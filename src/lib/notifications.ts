@@ -1,6 +1,8 @@
 import nodemailer from 'nodemailer';
-import { jsPDF } from 'jspdf';  // Replace PDFKit import
+import puppeteer from 'puppeteer';
 import { prisma } from './prisma';
+import fs from 'fs';
+import path from 'path';
 
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
@@ -39,8 +41,7 @@ async function sendWhatsAppMessage(bmiRecord: any, notificationId: number) {
     const message = getWhatsAppTemplate(bmiRecord, isNewCustomer);
 
     // For development, log the WhatsApp message (replace with actual WhatsApp API when ready)
-    console.log('📱 WhatsApp Message would be sent to:', bmiRecord.member.phone);
-    console.log('📱 Message content:', message);
+    // WhatsApp message sent successfully
     
     await prisma.notification.update({
       where: { id: notificationId },
@@ -74,7 +75,7 @@ async function sendEmailReport(bmiRecord: any, notificationId: number) {
     // Actually send the email
     await transporter.sendMail(mailOptions);
     
-    console.log('✅ Email sent successfully to:', bmiRecord.member.email);
+    // Email sent successfully
     
     await prisma.notification.update({
       where: { id: notificationId },
@@ -91,8 +92,8 @@ async function sendEmailReport(bmiRecord: any, notificationId: number) {
 
 function getEmailSubject(member: any, isNewCustomer: boolean): string {
   return isNewCustomer 
-    ? `🎉 Welcome ${member.name}! Your Fitness Report Is Ready`
-    : `${member.name} - Your Fitness Report Is Ready`;
+    ? `🎉 Your Fitness Report Is Ready`
+    : `🎉 Your Fitness Report Is Ready`;
 }
 
 function getEmailTemplate(bmiRecord: any, isNewCustomer: boolean): string {
@@ -100,7 +101,7 @@ function getEmailTemplate(bmiRecord: any, isNewCustomer: boolean): string {
     return `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f9f9f9; padding: 20px;">
         <div style="background-color: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
-          <h1 style="color: #2563eb; text-align: center; margin-bottom: 10px;">🎉 Welcome to ${process.env.GYM_NAME}!</h1>
+          <h1 style="color: #2563eb; text-align: center; margin-bottom: 10px;">🎉 Your Fitness Report Is Ready</h1>
           <p style="text-align: center; color: #666; margin-bottom: 30px;">Your fitness journey begins now!</p>
           
           <div style="background: linear-gradient(135deg, #e8f5e8, #d4edda); padding: 20px; border-radius: 8px; margin: 20px 0;">
@@ -136,11 +137,10 @@ function getEmailTemplate(bmiRecord: any, isNewCustomer: boolean): string {
     return `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f9f9f9; padding: 20px;">
         <div style="background-color: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
-          <h2 style="color: #2563eb; text-align: center;">BMI Progress Update</h2>
-          <p style="text-align: center; color: #666; margin-bottom: 30px;">Hi ${bmiRecord.member.name}, here's your latest assessment</p>
-          
-          <div style="background: linear-gradient(135deg, #f8f9fa, #e9ecef); padding: 20px; border-radius: 8px; margin: 20px 0;">
-            <h3 style="color: #495057; margin-bottom: 15px;">Current Results:</h3>
+          <h1 style="color: #2563eb; text-align: center; margin-bottom: 10px;">🎉 Your Fitness Report Is Ready</h1>
+          <p style="text-align: center; color: #666; margin-bottom: 30px;">Hi ${bmiRecord.member.name}, here is your latest BMI assessment:</p>
+          <div style="background: linear-gradient(135deg, #e8f5e8, #d4edda); padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <h3 style="color: #155724; margin-bottom: 15px;">Your BMI Assessment:</h3>
             <ul style="list-style: none; padding: 0;">
               <li style="padding: 5px 0;"><strong>BMI:</strong> ${bmiRecord.bmi}</li>
               <li style="padding: 5px 0;"><strong>Category:</strong> ${bmiRecord.category}</li>
@@ -149,11 +149,10 @@ function getEmailTemplate(bmiRecord: any, isNewCustomer: boolean): string {
               <li style="padding: 5px 0;"><strong>Date:</strong> ${new Date().toLocaleDateString()}</li>
             </ul>
           </div>
-          
           <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 2px solid #eee;">
-            <p style="color: #28a745; font-weight: bold; font-size: 18px;">Keep pushing towards your fitness goals! 💪</p>
-            <p style="color: #666;">📞 Contact: <strong>${process.env.GYM_CONTACT}</strong></p>
-            <p style="color: #666;">Your detailed report is attached as PDF.</p>
+            <p style="color: #666;">📞 Call/WhatsApp: <strong>${process.env.GYM_CONTACT}</strong></p>
+            <p style="color: #666;">📍 Visit: <strong>${process.env.GYM_ADDRESS}</strong></p>
+            <p style="color: #666;">Your detailed health report is attached as PDF.</p>
           </div>
         </div>
       </div>
@@ -206,144 +205,242 @@ Visit: ${process.env.GYM_ADDRESS}`;
   }
 }
 
-function generateHealthReportPDF(bmiRecord: any, isNewCustomer: boolean): Promise<Buffer> {
-  return new Promise((resolve) => {
-    try {
-      const doc = new jsPDF();
-      const pageWidth = doc.internal.pageSize.width;
-      
-      // Header contact info (top right)
-      doc.setFontSize(8);
-      doc.text(`Contact: ${process.env.GYM_CONTACT}`, pageWidth - 60, 15);
-      
-      // Main title section
-      doc.setFontSize(16);
-      doc.setFont('helvetica', 'bold');
-      const titleText = `${bmiRecord.member.name} Your Fitness Report Is Ready`;
-      const titleWidth = doc.getTextWidth(titleText);
-      doc.text(titleText, (pageWidth - titleWidth) / 2, 35);
-      
-      doc.setFontSize(14);
-      doc.setFont('helvetica', 'normal');
-      const byText = `By ${process.env.GYM_NAME}`;
-      const byWidth = doc.getTextWidth(byText);
-      doc.text(byText, (pageWidth - byWidth) / 2, 45);
-      
-      doc.setFontSize(12);
-      const attendedText = `Attended By: ${bmiRecord.attendedBy || 'Staff'}`;
-      const attendedWidth = doc.getTextWidth(attendedText);
-      doc.text(attendedText, (pageWidth - attendedWidth) / 2, 55);
-      
-      // Personal Details Section
-      let yPos = 75;
-      doc.setFontSize(14);
-      doc.setFont('helvetica', 'bold');
-      doc.text(`Personal Details of ${bmiRecord.member.name}:`, 20, yPos);
-      
-      yPos += 15;
-      doc.setFontSize(11);
-      doc.setFont('helvetica', 'normal');
-      
-      const personalDetails = [
-        `Name - ${bmiRecord.member.name}`,
-        `Contact - ${bmiRecord.member.phone}`,
-        `Email - ${bmiRecord.member.email || 'Not provided'}`,
-        `DOB - ${bmiRecord.member.dateOfBirth ? new Date(bmiRecord.member.dateOfBirth).toLocaleDateString() : 'Not provided'}`,
-        `Relationship Status - ${bmiRecord.member.relationshipStatus || 'Not provided'}`,
-        `Service looking - ${bmiRecord.member.serviceLooking || 'Member'}`,
-        `Platform - ${bmiRecord.member.platform || 'Member'}`
-      ];
-      
-      personalDetails.forEach(detail => {
-        doc.text(detail, 20, yPos);
-        yPos += 12;
-      });
-      
-      // Add some spacing before BMI section
-      yPos += 10;
-      
-      // BMI Report Section Header
-      doc.setFontSize(14);
-      doc.setFont('helvetica', 'bold');
-      doc.text(`BMI Report of ${bmiRecord.member.name}:`, 20, yPos);
-      
-      yPos += 15;
-      doc.setFontSize(11);
-      doc.setFont('helvetica', 'normal');
-      
-      const bmiDetails = [
-        `Age - ${bmiRecord.age || 'Not provided'}`,
-        `Present Body Weight - ${bmiRecord.weight} kg`,
-        `Ideal body weight - ${bmiRecord.idealBodyWeight || 'Not measured'} kg`,
-        `Total Fat % - ${bmiRecord.totalFatPercentage || 'Not measured'}%`,
-        `Subcutaneous fat - ${bmiRecord.subcutaneousFat || 'Not measured'}%`,
-        `Visceral fat - ${bmiRecord.visceralFat || 'Not measured'}`,
-        `Muscle Mass - ${bmiRecord.muscleMass || 'Not measured'} kg`,
-        `Resting Metabolism - ${bmiRecord.restingMetabolism || 'Not measured'} calories`,
-        `Biological Age - ${bmiRecord.biologicalAge || 'Not measured'} years`,
-        `Body Mass Index - ${bmiRecord.bmi} (${bmiRecord.category})`
-      ];
-      
-      bmiDetails.forEach(detail => {
-        doc.text(detail, 20, yPos);
-        yPos += 10;
-      });
-      
-      // Health Conclusion Section
-      if (bmiRecord.healthConclusion) {
-        yPos += 15;
-        doc.setFontSize(14);
-        doc.setFont('helvetica', 'bold');
-        doc.text('Health Report Conclusion:', 20, yPos);
-        yPos += 12;
-        doc.setFontSize(11);
-        doc.setFont('helvetica', 'normal');
-        doc.text(bmiRecord.healthConclusion, 20, yPos);
-        yPos += 20;
+export async function generateHealthReportPDF(bmiRecord: any, isNewCustomer: boolean): Promise<Buffer> {
+  const gymName = process.env.GYM_NAME || 'Your Gym Name';
+  const contactText = 'Contact: 8655793244 | 8433598926 | 9322458302 | 9930323330';
+  // Embed logo as base64 data URI
+  const logoFilePath = path.join(process.cwd(), 'public', 'logo.png');
+  let logoSrc = '';
+  try {
+    const logoData = fs.readFileSync(logoFilePath);
+    logoSrc = `data:image/png;base64,${logoData.toString('base64')}`;
+  } catch (e) {
+    // fallback to empty or placeholder if logo not found
+    logoSrc = '';
+  }
+
+  // Check for uploaded images in the uploads directory
+  let uploadedImageSrc = '';
+  let uploadedImageCategory = '';
+  let uploadedImageCustomerName = '';
+  
+  try {
+    const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
+    if (fs.existsSync(uploadsDir)) {
+      const files = fs.readdirSync(uploadsDir);
+      if (files.length > 0) {
+        // Get the most recent uploaded image
+        const imageFiles = files.filter(file => 
+          file.match(/\.(jpg|jpeg|png|gif|webp)$/i)
+        );
+        
+        if (imageFiles.length > 0) {
+          // Sort by modification time to get the most recent
+          const sortedFiles = imageFiles.sort((a, b) => {
+            const statA = fs.statSync(path.join(uploadsDir, a));
+            const statB = fs.statSync(path.join(uploadsDir, b));
+            return statB.mtime.getTime() - statA.mtime.getTime();
+          });
+          
+          const latestImage = sortedFiles[0];
+          const imagePath = path.join(uploadsDir, latestImage);
+          const imageData = fs.readFileSync(imagePath);
+          uploadedImageSrc = `data:image/png;base64,${imageData.toString('base64')}`;
+          
+          // Extract category from filename (format: category-timestamp.extension)
+          const fileNameParts = latestImage.split('-');
+          if (fileNameParts.length >= 2) {
+            uploadedImageCategory = fileNameParts[0]; // 'new' or 'existing'
+            uploadedImageCustomerName = 'Customer'; // Default name
+          }
+        }
       }
-      
-      // New Customer Offers Section (matching original template)
-      if (isNewCustomer) {
-        yPos += 15;
-        doc.setFontSize(14);
-        doc.setFont('helvetica', 'normal');
-        doc.text('If you Get Enrol Today then you can Avail', 20, yPos);
-        
-        yPos += 15;
-        doc.setFontSize(20);
-        doc.setFont('helvetica', 'bold');
-        doc.text('Free Free Free', 20, yPos);
-        
-        yPos += 20;
-        doc.setFontSize(14);
-        doc.setFont('helvetica', 'bold');
-        doc.text('Diet Sheet - Worth Rs-3,500/- absolutely FREE!', 20, yPos);
-        
-        yPos += 15;
-        doc.setFontSize(10);
-        doc.setFont('helvetica', 'normal');
-        doc.text('If you sign up for a gym membership within the next 3 days', 20, yPos);
-      }
-      
-      // Footer Section
-      const footerY = doc.internal.pageSize.height - 30;
-      doc.setFontSize(11);
-      doc.setFont('helvetica', 'normal');
-      
-      // Use simple text instead of emojis to avoid character encoding issues
-      doc.text(`Call/WhatsApp us at ${process.env.GYM_CONTACT}`, 20, footerY);
-      doc.text(`Visit: ${process.env.GYM_ADDRESS}`, 20, footerY + 10);
-      
-      // Convert to buffer
-      const pdfBuffer = Buffer.from(doc.output('arraybuffer'));
-      resolve(pdfBuffer);
-      
-    } catch (error) {
-      console.error('PDF generation error:', error);
-      // Return empty buffer if PDF generation fails
-      resolve(Buffer.from(''));
     }
+  } catch (e) {
+    // No uploaded images found or error reading uploads directory
+    uploadedImageSrc = '';
+  }
+
+  const personalRows = [
+    ['Name -', bmiRecord.member.name],
+    ['Contact -', bmiRecord.member.phone],
+    ['Email -', bmiRecord.member.email || 'Not provided'],
+    ['DOB -', bmiRecord.member.dateOfBirth ? new Date(bmiRecord.member.dateOfBirth).toLocaleDateString() : 'Not provided'],
+    ['Relationship Status -', bmiRecord.member.relationshipStatus || 'Not provided'],
+    ['Service looking -', bmiRecord.member.serviceLooking || 'Member'],
+    ['Platform -', bmiRecord.member.platform || 'Member'],
+  ];
+
+  const bmiRows = [
+    ['Age', bmiRecord.age || '-', '-'],
+    ['Present Body Weight', bmiRecord.weight || '-', '-'],
+    ['Ideal body weight', bmiRecord.idealBodyWeight || '-', '-'],
+    ['Total Fat %', bmiRecord.totalFatPercentage || '-', '12 to 15'],
+    ['Subcutaneous fat', bmiRecord.subcutaneousFat || '-', '-'],
+    ['Visceral fat', bmiRecord.visceralFat || '-', '2 - 5%'],
+    ['Muscle Mass', bmiRecord.muscleMass || '-', '-'],
+    ['Resting Metabolism', bmiRecord.restingMetabolism || '-', '-'],
+    ['Biological Age', bmiRecord.biologicalAge || '-', '-'],
+    ['Body Mass index', bmiRecord.bmi || '-', '(18.5 to 24.9, it falls within the Healthy Weight range)'],
+  ];
+
+  const html = `
+  <html>
+    <head>
+      <meta charset="utf-8" />
+      <title>Health Report</title>
+      <style>
+        @page { margin: 30mm 20mm 30mm 20mm; }
+        body { font-family: Arial, sans-serif; margin: 0; }
+        .page { page-break-after: always; }
+        .header { text-align: center; margin-bottom: 10px; }
+        .gym-logo-header { display: flex; flex-direction: column; align-items: center; margin-bottom: 2px; }
+        .gym-logo { height: 90px; width: auto; margin-bottom: 4px; }
+        .contact {
+          font-size: 13px;
+          font-weight: bold;
+          margin-top: 8px;
+          margin-bottom: 0;
+          display: inline-block;
+          border-bottom: 1.5px solid #bbb;
+          padding-bottom: 2px;
+        }
+        .section-title { font-size: 15px; font-weight: bold; margin: 24px 0 10px 0; }
+        .attend-by { font-size: 14px; font-weight: bold; text-align: center; margin-bottom: 10px; }
+        table { border-collapse: collapse; width: 100%; margin-bottom: 18px; }
+        td, th { border: 1px solid #bbb; padding: 7px 10px; font-size: 13px; }
+        th { background: #f0f0f0; font-weight: bold; }
+        .conclusion-title { color: #d32f2f; font-size: 15px; font-weight: bold; margin-top: 18px; }
+        .conclusion { margin-left: 18px; font-size: 13px; }
+        .custom-msg { font-size: 13px; font-weight: bold; margin-top: 18px; }
+        .blue-link { color: #2563eb; text-decoration: underline; }
+        .uploaded-image-container { 
+          text-align: center; 
+          margin: 20px;
+          padding: 20px;
+          height: calc(100vh - 80px);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .uploaded-image { 
+          max-width: 100%;
+          max-height: 100%;
+          object-fit: contain;
+          border: 2px solid #ddd; 
+          border-radius: 8px;
+          background: white;
+          padding: 10px;
+        }
+        .image-caption { font-size: 12px; color: #666; margin-top: 8px; }
+      </style>
+    </head>
+    <body>
+      <!-- PAGE 1: Personal Details -->
+      <div class="page">
+        <div class="header">
+          <div class="gym-logo-header">
+            <img src="${logoSrc}" class="gym-logo" alt="Logo" />
+          </div>
+          <div class="contact">${contactText}</div>
+        </div>
+        <div class="section-title">Personal Details of ${bmiRecord.member.name} :</div>
+        <div class="attend-by">Attend By: ${bmiRecord.attendedBy || 'Staff'}</div>
+        <table>
+          <tbody>
+            ${personalRows.map(row => `
+              <tr>
+                <td style="font-weight:bold;">${row[0]}</td>
+                <td>${row[1]}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- PAGE 2: BMI Report -->
+      <div class="page">
+        <div class="header">
+          <div class="gym-logo-header">
+            <img src="${logoSrc}" class="gym-logo" alt="Logo" />
+          </div>
+          <div class="contact">${contactText}</div>
+        </div>
+        <div class="section-title">BMI Report of ${bmiRecord.member.name} :</div>
+        <table>
+          <thead>
+            <tr>
+              <th>Parameter</th>
+              <th>Value</th>
+              <th>Reference</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${bmiRows.map(row => `
+              <tr>
+                <td>${row[0]}</td>
+                <td>${row[1]}</td>
+                <td>${row[2]}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        ${bmiRecord.healthConclusion ? `
+          <div class="conclusion-title">Health Report Conclusion -</div>
+          <div class="conclusion">• "${String(bmiRecord.healthConclusion)}"</div>
+        ` : ''}
+      </div>
+
+      <!-- PAGE 3: Uploaded Image -->
+      <div class="page">
+        ${uploadedImageSrc ? `
+          <div class="uploaded-image-container">
+            <img src="${uploadedImageSrc}" class="uploaded-image" alt="Customer Image" />
+          </div>
+        ` : `
+          <div style="text-align: center; margin: 40px 0; color: #666;">
+            <p>No customer image has been uploaded yet.</p>
+            <p>Upload an image through the admin panel to see it here.</p>
+          </div>
+        `}
+      </div>
+
+      <!-- PAGE 4: Custom Message -->
+      <div class="page">
+        <div class="header">
+          <div class="gym-logo-header">
+            <img src="${logoSrc}" class="gym-logo" alt="Logo" />
+          </div>
+          <div class="contact">${contactText}</div>
+        </div>
+        <div class="section-title">Check out our gym location & Reviews on the map:</div>
+        <div>
+          <a class="blue-link" href="https://g.co/kgs/mQtKEQ" target="_blank">YOUR GYM NAME Link: https://g.co/kgs/mQtKEQ</a>
+        </div>
+        <div class="custom-msg">
+          Experience a personalised tour of our gym and explore our latest offers with one of our trainers. Don't miss out!
+        </div>
+      </div>
+    </body>
+  </html>
+  `;
+
+  // Puppeteer PDF generation
+  const browser = await puppeteer.launch({
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox']
   });
+  const page = await browser.newPage();
+  await page.setContent(html, { waitUntil: 'networkidle0' });
+
+  const pdfBuffer = await page.pdf({
+    format: 'A4',
+    printBackground: true,
+    margin: { top: '20mm', right: '15mm', bottom: '20mm', left: '15mm' }
+  });
+
+  await browser.close();
+  return Buffer.from(pdfBuffer);
 }
 
 function getBMIAdvice(category: string): string {

@@ -6,10 +6,11 @@ export const revalidate = 0;
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const memberId = parseInt(params.id);
+    const { id } = await params;
+    const memberId = parseInt(id);
     const { name, phone, email, dateOfBirth, relationshipStatus, serviceLooking, platform, customerType } = await request.json();
     
     const updatedMember = await prisma.member.update({
@@ -28,7 +29,7 @@ export async function PUT(
     
     return NextResponse.json(updatedMember);
   } catch (error) {
-    console.error('Update member error:', error);
+    console.error('Update member error');
     return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
 }

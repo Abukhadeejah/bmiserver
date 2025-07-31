@@ -7,9 +7,6 @@ export const revalidate = 0;
 
 export async function GET() {
   try {
-    console.log('🔍 API Route: /api/members GET called');
-    console.log('🔍 DATABASE_URL from env:', process.env.DATABASE_URL);
-    
     const members = await prisma.member.findMany({
       include: {
         bmiRecords: {
@@ -19,21 +16,15 @@ export async function GET() {
       }
     });
     
-    console.log('✅ Query successful - Members found:', members.length);
-    console.log('📋 Members data:', members.map(m => ({ id: m.id, name: m.name, memberId: m.memberId })));
-    
     return NextResponse.json(members);
   } catch (error) {
-    console.error('❌ Database query failed:', error);
-    console.error('❌ Error details:', error.message);
-    return NextResponse.json({ error: 'Server error', details: error.message }, { status: 500 });
+    console.error('Database query failed');
+    return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('🔍 API Route: /api/members POST called');
-    
     const { name, phone, email, dateOfBirth, relationshipStatus, serviceLooking, platform } = await request.json();
     
     // Generate member ID
@@ -57,10 +48,9 @@ export async function POST(request: NextRequest) {
       }
     });
     
-    console.log('✅ Member created:', member.memberId);
     return NextResponse.json(member);
   } catch (error) {
-    console.error('❌ Create member error:', error);
-    return NextResponse.json({ error: 'Server error', details: error.message }, { status: 500 });
+    console.error('Create member error');
+    return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
 }

@@ -40,7 +40,7 @@ export default function EditMember({ member, onMemberUpdated, onCancel }: EditMe
         onMemberUpdated();
       }
     } catch (error) {
-      console.error('Error updating member:', error);
+      console.error('Error updating member');
       alert('Failed to update member');
     } finally {
       setIsLoading(false);

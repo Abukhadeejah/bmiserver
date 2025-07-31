@@ -10,7 +10,7 @@ import { useRouter } from 'next/navigation';
 
 type Screen = 'memberList' | 'addMember' | 'editMember' | 'bmiCalculator';
 
-export default function Home() {
+export default function Dashboard() {
   const [currentScreen, setCurrentScreen] = useState<Screen>('memberList');
   const [selectedMember, setSelectedMember] = useState(null);
   const [members, setMembers] = useState([]);
@@ -24,8 +24,13 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    // Immediately redirect to login page when project opens
-    router.push('/login');
+    // Check if user is logged in, if not redirect to login page
+    const loginStatus = localStorage.getItem('isLoggedIn');
+    const role = localStorage.getItem('userRole');
+    
+    if (loginStatus !== 'true' || !role) {
+      router.push('/login');
+    }
   }, [router]);
 
   const checkLoginStatus = () => {
@@ -114,43 +119,31 @@ export default function Home() {
               {currentScreen === 'memberList' && 'BMI Tracker'}
               {currentScreen === 'addMember' && 'Add New Member'}
               {currentScreen === 'editMember' && 'Edit Member'}
-              {currentScreen === 'bmiCalculator' && 'BMI Assessment'}
+              {currentScreen === 'bmiCalculator' && 'BMI Calculator'}
             </h1>
-            {currentScreen === 'memberList' ? (
-              isLoggedIn ? (
+            <div className="flex items-center space-x-2">
+              {isLoggedIn && (
                 <div className="flex items-center space-x-2">
-                  <span className="text-sm text-white/80">
-                    {(userRole === 'admin' || userRole === 'ADMIN') ? '👑 Admin' : '👤 Staff'}
+                  <span className="text-sm font-medium">
+                    {(userRole === 'admin' || userRole === 'ADMIN') ? 'Admin' : 'Staff'}
                   </span>
                   <button
                     onClick={handleLogout}
-                    className="flex items-center space-x-2 py-2 px-3 rounded-lg hover:bg-blue-700 transition-colors"
+                    className="flex items-center space-x-1 py-2 px-3 rounded-lg hover:bg-blue-700 transition-colors"
                   >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                     </svg>
                     <span className="text-sm font-medium">Logout</span>
                   </button>
                 </div>
-              ) : (
-                <Link
-                  href="/login"
-                  className="flex items-center space-x-2 py-2 px-3 rounded-lg hover:bg-blue-700 transition-colors"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
-                  </svg>
-                  <span className="text-sm font-medium">Login</span>
-                </Link>
-              )
-            ) : (
-              <div className="w-16"></div>
-            )}
+              )}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Screen Content */}
+      {/* Content */}
       <div className="px-4 py-6">
         {currentScreen === 'memberList' && (
           <MemberList
@@ -161,7 +154,7 @@ export default function Home() {
             onUploadImage={handleUploadImage}
           />
         )}
-        
+
         {currentScreen === 'addMember' && (
           <AddMember onMemberAdded={handleMemberAdded} />
         )}
@@ -170,17 +163,14 @@ export default function Home() {
           <EditMember 
             member={selectedMember} 
             onMemberUpdated={handleMemberUpdated}
-            onCancel={() => {
-              setCurrentScreen('memberList');
-              setSelectedMember(null);
-            }}
+            onCancel={() => setCurrentScreen('memberList')}
           />
         )}
-        
+
         {currentScreen === 'bmiCalculator' && selectedMember && (
           <BMICalculator member={selectedMember} onSave={handleBMISaved} />
         )}
       </div>
     </div>
   );
-}
+} 
