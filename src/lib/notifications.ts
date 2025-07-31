@@ -1,6 +1,6 @@
 import nodemailer from 'nodemailer';
 import puppeteer from 'puppeteer';
-import { prisma } from './prisma';
+import { supabase } from './supabase';
 import fs from 'fs';
 import path from 'path';
 
@@ -16,12 +16,19 @@ const transporter = nodemailer.createTransport({
 
 export async function sendNotifications(bmiRecord: any) {
   try {
-    const notification = await prisma.notification.create({
-      data: {
+    const { data: notification, error } = await supabase
+      .from('Notification')
+      .insert({
         memberId: bmiRecord.memberId,
         bmiRecordId: bmiRecord.id,
-      }
-    });
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Notification creation error:', error);
+      return;
+    }
 
     if (bmiRecord.member.phone) {
       await sendWhatsAppMessage(bmiRecord, notification.id);
@@ -43,16 +50,16 @@ async function sendWhatsAppMessage(bmiRecord: any, notificationId: number) {
     // For development, log the WhatsApp message (replace with actual WhatsApp API when ready)
     // WhatsApp message sent successfully
     
-    await prisma.notification.update({
-      where: { id: notificationId },
-      data: { whatsappSent: true, whatsappStatus: 'sent' }
-    });
+    await supabase
+      .from('Notification')
+      .update({ whatsappSent: true, whatsappStatus: 'sent' })
+      .eq('id', notificationId);
   } catch (error) {
     console.error('WhatsApp error:', error);
-    await prisma.notification.update({
-      where: { id: notificationId },
-      data: { whatsappStatus: 'failed' }
-    });
+    await supabase
+      .from('Notification')
+      .update({ whatsappStatus: 'failed' })
+      .eq('id', notificationId);
   }
 }
 
@@ -77,16 +84,16 @@ async function sendEmailReport(bmiRecord: any, notificationId: number) {
     
     // Email sent successfully
     
-    await prisma.notification.update({
-      where: { id: notificationId },
-      data: { emailSent: true, emailStatus: 'sent' }
-    });
+    await supabase
+      .from('Notification')
+      .update({ emailSent: true, emailStatus: 'sent' })
+      .eq('id', notificationId);
   } catch (error) {
     console.error('❌ Email sending failed:', error);
-    await prisma.notification.update({
-      where: { id: notificationId },
-      data: { emailStatus: 'failed' }
-    });
+    await supabase
+      .from('Notification')
+      .update({ emailStatus: 'failed' })
+      .eq('id', notificationId);
   }
 }
 
@@ -207,7 +214,6 @@ Visit: ${process.env.GYM_ADDRESS}`;
 
 export async function generateHealthReportPDF(bmiRecord: any, isNewCustomer: boolean): Promise<Buffer> {
   const gymName = process.env.GYM_NAME || 'Your Gym Name';
-  const contactText = 'Contact: 8655793244 | 8433598926 | 9322458302 | 9930323330';
   // Embed logo as base64 data URI
   const logoFilePath = path.join(process.cwd(), 'public', 'logo.png');
   let logoSrc = '';
@@ -293,27 +299,18 @@ export async function generateHealthReportPDF(bmiRecord: any, isNewCustomer: boo
         @page { margin: 30mm 20mm 30mm 20mm; }
         body { font-family: Arial, sans-serif; margin: 0; }
         .page { page-break-after: always; }
-        .header { text-align: center; margin-bottom: 10px; }
-        .gym-logo-header { display: flex; flex-direction: column; align-items: center; margin-bottom: 2px; }
-        .gym-logo { height: 90px; width: auto; margin-bottom: 4px; }
-        .contact {
-          font-size: 13px;
-          font-weight: bold;
-          margin-top: 8px;
-          margin-bottom: 0;
-          display: inline-block;
-          border-bottom: 1.5px solid #bbb;
-          padding-bottom: 2px;
-        }
-        .section-title { font-size: 15px; font-weight: bold; margin: 24px 0 10px 0; }
-        .attend-by { font-size: 14px; font-weight: bold; text-align: center; margin-bottom: 10px; }
-        table { border-collapse: collapse; width: 100%; margin-bottom: 18px; }
-        td, th { border: 1px solid #bbb; padding: 7px 10px; font-size: 13px; }
+        .header { text-align: center; margin-bottom: 20px; }
+        .gym-logo-header { display: flex; flex-direction: column; align-items: center; margin-bottom: 8px; }
+        .gym-logo { height: 150px; width: auto; margin-bottom: 8px; }
+        .section-title { font-size: 22px; font-weight: bold; margin: 24px 0 15px 0; }
+        .attend-by { font-size: 18px; font-weight: bold; text-align: center; margin-bottom: 15px; }
+        table { border-collapse: collapse; width: 100%; margin-bottom: 25px; }
+        td, th { border: 1px solid #bbb; padding: 10px 15px; font-size: 17px; }
         th { background: #f0f0f0; font-weight: bold; }
-        .conclusion-title { color: #d32f2f; font-size: 15px; font-weight: bold; margin-top: 18px; }
-        .conclusion { margin-left: 18px; font-size: 13px; }
-        .custom-msg { font-size: 13px; font-weight: bold; margin-top: 18px; }
-        .blue-link { color: #2563eb; text-decoration: underline; }
+        .conclusion-title { color: #d32f2f; font-size: 22px; font-weight: bold; margin-top: 25px; }
+        .conclusion { margin-left: 18px; font-size: 17px; }
+        .custom-msg { font-size: 17px; font-weight: bold; margin-top: 25px; }
+        .blue-link { color: #2563eb; text-decoration: underline; font-size: 17px; }
         .uploaded-image-container { 
           text-align: center; 
           margin: 20px;
@@ -332,7 +329,7 @@ export async function generateHealthReportPDF(bmiRecord: any, isNewCustomer: boo
           background: white;
           padding: 10px;
         }
-        .image-caption { font-size: 12px; color: #666; margin-top: 8px; }
+        .image-caption { font-size: 16px; color: #666; margin-top: 8px; }
       </style>
     </head>
     <body>
@@ -342,7 +339,6 @@ export async function generateHealthReportPDF(bmiRecord: any, isNewCustomer: boo
           <div class="gym-logo-header">
             <img src="${logoSrc}" class="gym-logo" alt="Logo" />
           </div>
-          <div class="contact">${contactText}</div>
         </div>
         <div class="section-title">Personal Details of ${bmiRecord.member.name} :</div>
         <div class="attend-by">Attend By: ${bmiRecord.attendedBy || 'Staff'}</div>
@@ -364,7 +360,6 @@ export async function generateHealthReportPDF(bmiRecord: any, isNewCustomer: boo
           <div class="gym-logo-header">
             <img src="${logoSrc}" class="gym-logo" alt="Logo" />
           </div>
-          <div class="contact">${contactText}</div>
         </div>
         <div class="section-title">BMI Report of ${bmiRecord.member.name} :</div>
         <table>
@@ -411,7 +406,6 @@ export async function generateHealthReportPDF(bmiRecord: any, isNewCustomer: boo
           <div class="gym-logo-header">
             <img src="${logoSrc}" class="gym-logo" alt="Logo" />
           </div>
-          <div class="contact">${contactText}</div>
         </div>
         <div class="section-title">Check out our gym location & Reviews on the map:</div>
         <div>

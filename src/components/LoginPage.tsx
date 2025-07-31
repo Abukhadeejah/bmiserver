@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { API_ENDPOINTS } from '@/lib/api-config';
 
 interface LoginFormData {
   username: string;
@@ -36,7 +37,7 @@ const LoginPage: React.FC = () => {
     setError('');
 
     try {
-      const response = await fetch('/api/auth/db-login', {
+      const response = await fetch(API_ENDPOINTS.LOGIN, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -62,8 +63,8 @@ const LoginPage: React.FC = () => {
         setError(result.error || 'Invalid username or password');
       }
     } catch (error) {
-      console.error('Login error');
-      setError('Login failed. Please try again.');
+      console.error('Login error:', error);
+      setError('Login failed. Please check your internet connection and try again.');
     } finally {
       setLoading(false);
     }

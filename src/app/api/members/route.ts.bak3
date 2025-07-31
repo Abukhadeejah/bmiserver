@@ -1,0 +1,99 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { supabase } from '@/lib/supabase';
+
+// Prevent caching issues in Next.js 13+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
+export async function GET() {
+  try {
+    // First, fetch all members
+    const { data: members, error: membersError } = await supabase
+      .from('Member')
+      .select('*')
+      .order('createdAt', { ascending: false });
+
+    if (membersError) {
+      console.error('Database query failed:', membersError);
+      return NextResponse.json({ error: 'Server error', details: membersError.message }, { status: 500 });
+    }
+
+    // Then, fetch BMI records for each member
+    const membersWithBMI = await Promise.all(
+      (members || []).map(async (member) => {
+        const { data: bmiRecords, error: bmiError } = await supabase
+          .from('BMIRecord')
+          .select('id, bmi, category, recordedAt')
+          .eq('memberId', member.id)
+          .order('recordedAt', { ascending: false })
+          .limit(1);
+
+        if (bmiError) {
+          console.error(`Error fetching BMI records for member ${member.id}:`, bmiError);
+          return {
+            ...member,
+            bmiRecords: []
+          };
+        }
+
+        return {
+          ...member,
+          bmiRecords: bmiRecords || []
+        };
+      })
+    );
+    
+    return NextResponse.json(membersWithBMI);
+  } catch (error) {
+    console.error('Database query failed:', error);
+    return NextResponse.json({ error: 'Server error', details: error instanceof Error ? error.message : 'Unknown error' }, { status: 500 });
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const { name, phone, email, dateOfBirth, relationshipStatus, serviceLooking, platform } = await request.json();
+    
+    // Generate member ID
+    const { data: lastMember, error: countError } = await supabase
+      .from('Member')
+      .select('id')
+      .order('id', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (countError && countError.code !== 'PGRST116') {
+      console.error('Error getting last member');
+      return NextResponse.json({ error: 'Server error' }, { status: 500 });
+    }
+
+    const nextId = lastMember ? lastMember.id + 1 : 1;
+    const memberId = `M${nextId.toString().padStart(3, '0')}`;
+    
+    const { data: member, error } = await supabase
+      .from('Member')
+      .insert({
+        memberId,
+        name,
+        phone,
+        email,
+        dateOfBirth: dateOfBirth ? new Date(dateOfBirth).toISOString() : null,
+        relationshipStatus,
+        serviceLooking,
+        platform,
+        customerType: 'new'
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Create member error');
+      return NextResponse.json({ error: 'Server error' }, { status: 500 });
+    }
+    
+    return NextResponse.json(member);
+  } catch (error) {
+    console.error('Create member error');
+    return NextResponse.json({ error: 'Server error' }, { status: 500 });
+  }
+}

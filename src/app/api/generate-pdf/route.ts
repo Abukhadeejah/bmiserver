@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateHealthReportPDF } from '@/lib/notifications';
-import { prisma } from '@/lib/prisma';
+import { supabase } from '@/lib/supabase';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,14 +9,16 @@ export async function POST(request: NextRequest) {
     const { bmiRecordId, uploadedImageInfo } = await request.json();
 
     // Get BMI record
-    const bmiRecord = await prisma.bMIRecord.findUnique({
-      where: { id: parseInt(bmiRecordId) },
-      include: {
-        member: true
-      }
-    });
+    const { data: bmiRecord, error } = await supabase
+      .from('BMIRecord')
+      .select(`
+        *,
+        member:Member(*)
+      `)
+      .eq('id', parseInt(bmiRecordId))
+      .single();
 
-    if (!bmiRecord) {
+    if (error || !bmiRecord) {
       return NextResponse.json({ error: 'BMI record not found' }, { status: 404 });
     }
 

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { prisma } from '@/lib/prisma';
+import { supabase } from '@/lib/supabase';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,11 +9,13 @@ export async function POST(request: NextRequest) {
   try {
     const { username, password } = await request.json();
     
-    const admin = await prisma.adminUser.findUnique({
-      where: { username }
-    });
+    const { data: admin, error } = await supabase
+      .from('AdminUser')
+      .select('*')
+      .eq('username', username)
+      .single();
     
-    if (!admin || !bcrypt.compareSync(password, admin.passwordHash)) {
+    if (error || !admin || !bcrypt.compareSync(password, admin.passwordHash)) {
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
     }
     

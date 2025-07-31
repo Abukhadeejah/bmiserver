@@ -7,26 +7,36 @@ import AddMember from '@/components/AddMember';
 import EditMember from '@/components/EditMember';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { API_ENDPOINTS } from '@/lib/api-config';
 
 type Screen = 'memberList' | 'addMember' | 'editMember' | 'bmiCalculator';
 
 export default function Home() {
   const [currentScreen, setCurrentScreen] = useState<Screen>('memberList');
-  const [selectedMember, setSelectedMember] = useState(null);
-  const [members, setMembers] = useState([]);
+  const [selectedMember, setSelectedMember] = useState<any>(null);
+  const [members, setMembers] = useState<any[]>([]);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userRole, setUserRole] = useState<string | null>(null);
+  const [isClient, setIsClient] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
-    fetchMembers();
-    checkLoginStatus();
+    setIsClient(true);
   }, []);
 
   useEffect(() => {
+    if (!isClient) return;
+    
+    fetchMembers();
+    checkLoginStatus();
+  }, [isClient]);
+
+  useEffect(() => {
+    if (!isClient) return;
+    
     // Immediately redirect to login page when project opens
     router.push('/login');
-  }, [router]);
+  }, [router, isClient]);
 
   const checkLoginStatus = () => {
     const loginStatus = localStorage.getItem('isLoggedIn');
@@ -50,11 +60,15 @@ export default function Home() {
 
   const fetchMembers = async () => {
     try {
-      const response = await fetch('/api/members');
+      const response = await fetch(API_ENDPOINTS.MEMBERS);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
       const data = await response.json();
-      setMembers(data);
+      setMembers(Array.isArray(data) ? data : []);
     } catch (error) {
-      console.error('Error fetching members');
+      console.error('Error fetching members:', error);
+      setMembers([]);
     }
   };
 
@@ -89,6 +103,18 @@ export default function Home() {
     // Navigate to category upload page
     router.push('/category-upload');
   };
+
+  // Don't render anything until client-side hydration is complete
+  if (!isClient) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">

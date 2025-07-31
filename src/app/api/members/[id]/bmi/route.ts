@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { supabase } from '@/lib/supabase';
 import { sendNotifications } from '@/lib/notifications';
 
 export const dynamic = 'force-dynamic';
@@ -47,8 +47,9 @@ export async function POST(
       return value?.toString().trim() === '' ? null : Number(value);
     };
     
-    const bmiRecord = await prisma.bMIRecord.create({
-      data: {
+    const { data: bmiRecord, error } = await supabase
+      .from('BMIRecord')
+      .insert({
         memberId,
         height: Number(height),
         weight: Number(weight),
@@ -64,17 +65,23 @@ export async function POST(
         restingMetabolism: numOrNull(restingMetabolism),
         biologicalAge: numOrNull(biologicalAge),
         healthConclusion: healthConclusion || null
-      },
-      include: {
-        member: true
-      }
-    });
+      })
+      .select(`
+        *,
+        member:Member(*)
+      `)
+      .single();
+
+    if (error) {
+      console.error('BMI recording error');
+      return NextResponse.json({ error: 'Server error' }, { status: 500 });
+    }
     
      // Update member to existing customer if not already
-     await prisma.member.update({
-      where: { id: memberId },
-      data: { customerType: 'existing' }
-    });
+     await supabase
+      .from('Member')
+      .update({ customerType: 'existing' })
+      .eq('id', memberId);
 
     // Send notifications with uploaded image info if available
     if (uploadedImageInfo) {
