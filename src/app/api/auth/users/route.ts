@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { prisma } from '@/lib/prisma';
 import { validateEnvironment } from '@/lib/env-validation';
 
 export const dynamic = 'force-dynamic';
@@ -13,14 +13,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { data: users, error } = await supabase
-      .from('UserPass')
-      .select('id, username, role, isActive, createdAt, updatedAt');
-
-    if (error) {
-      console.error('Get users error');
-      return NextResponse.json({ error: 'Server error' }, { status: 500 });
-    }
+    const users = await prisma.userPass.findMany({
+      select: {
+        id: true,
+        username: true,
+        role: true,
+        isActive: true,
+        createdAt: true,
+        updatedAt: true
+      }
+    });
 
     return NextResponse.json(users);
   } catch (error) {
@@ -56,37 +58,30 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if username already exists
-    const { data: existingUser, error: checkError } = await supabase
-      .from('UserPass')
-      .select('username')
-      .eq('username', username)
-      .single();
-
-    if (checkError && checkError.code !== 'PGRST116') {
-      console.error('Check user error');
-      return NextResponse.json({ error: 'Server error' }, { status: 500 });
-    }
+    const existingUser = await prisma.userPass.findUnique({
+      where: { username: username }
+    });
 
     if (existingUser) {
       return NextResponse.json({ error: 'Username already exists' }, { status: 409 });
     }
 
     // Store password as plain text
-    const { data: newUser, error } = await supabase
-      .from('UserPass')
-      .insert({
+    const newUser = await prisma.userPass.create({
+      data: {
         username: username,
         password: password,
         role,
         isActive: true
-      })
-      .select('id, username, role, isActive, createdAt')
-      .single();
-
-    if (error) {
-      console.error('Create user error');
-      return NextResponse.json({ error: 'Failed to create user' }, { status: 500 });
-    }
+      },
+      select: {
+        id: true,
+        username: true,
+        role: true,
+        isActive: true,
+        createdAt: true
+      }
+    });
 
     return NextResponse.json({
       success: true,
