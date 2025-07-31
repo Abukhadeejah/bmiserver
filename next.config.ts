@@ -1,14 +1,14 @@
 /** @type {import('next').NextConfig} */
-const nextConfig = {
-  trailingSlash: true,
+const nextConfig = {           // enable static export mode
+  trailingSlash: true,        // add trailing slash to paths
   images: {
-    unoptimized: true
+    unoptimized: true,        // disable Next.js image optimization (needed for static export)
   },
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: true,  // allow build to pass despite TS errors
   },
   eslint: {
-    ignoreDuringBuilds: true,
+    ignoreDuringBuilds: true, // allow build to pass despite ESLint errors
   },
 };
 
