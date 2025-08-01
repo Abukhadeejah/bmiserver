@@ -24,12 +24,23 @@ export const dynamic = 'force-dynamic';
 export async function POST(request: NextRequest) {
   try {
     console.log('=== UPLOAD API START ===');
+    console.log('Request headers:', Object.fromEntries(request.headers.entries()));
     
     // Create Supabase client inside the function
     const supabase = createSupabaseClient();
     console.log('Supabase client created successfully');
     
-    const formData = await request.formData();
+    let formData;
+    try {
+      formData = await request.formData();
+    } catch (formDataError) {
+      console.error('FormData parsing error:', formDataError);
+      return NextResponse.json({ 
+        error: 'Failed to parse form data',
+        details: formDataError instanceof Error ? formDataError.message : 'Unknown error'
+      }, { status: 400 });
+    }
+    
     const image = formData.get('image') as File;
     const category = formData.get('category') as string;
     const customerName = formData.get('customerName') as string;
@@ -38,13 +49,39 @@ export async function POST(request: NextRequest) {
     console.log('Form data received:', { 
       hasImage: !!image, 
       imageSize: image?.size, 
+      imageType: image?.type,
+      imageName: image?.name,
       category, 
       customerName, 
       customerId 
     });
 
     if (!image) {
+      console.error('No image in form data');
       return NextResponse.json({ error: 'No image provided' }, { status: 400 });
+    }
+    
+    if (!(image instanceof File)) {
+      console.error('Image is not a File object:', typeof image);
+      return NextResponse.json({ error: 'Invalid image format' }, { status: 400 });
+    }
+    
+    // Check file size (5MB limit)
+    const maxSize = 5 * 1024 * 1024; // 5MB
+    if (image.size > maxSize) {
+      console.error('File too large:', image.size);
+      return NextResponse.json({ 
+        error: 'File too large. Maximum size is 5MB' 
+      }, { status: 400 });
+    }
+    
+    // Check file type
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+    if (!allowedTypes.includes(image.type)) {
+      console.error('Invalid file type:', image.type);
+      return NextResponse.json({ 
+        error: 'Invalid file type. Only JPEG, PNG, GIF, and WebP are allowed' 
+      }, { status: 400 });
     }
 
     // Delete old images for this category only
@@ -78,8 +115,22 @@ export async function POST(request: NextRequest) {
     const fileName = `${category}-${customerId}-${timestamp}.${image.name.split('.').pop()}`;
 
     // Convert File to Buffer
-    const bytes = await image.arrayBuffer();
-    const buffer = Buffer.from(bytes);
+    let bytes, buffer;
+    try {
+      bytes = await image.arrayBuffer();
+      buffer = Buffer.from(bytes);
+    } catch (bufferError) {
+      console.error('Buffer creation error:', bufferError);
+      return NextResponse.json({ 
+        error: 'Failed to process image',
+        details: bufferError instanceof Error ? bufferError.message : 'Unknown error'
+      }, { status: 500 });
+    }
+    
+    console.log('Buffer created:', {
+      bufferLength: buffer.length,
+      originalSize: image.size
+    });
 
     console.log('Attempting to create bucket...');
     // Try to create bucket if it doesn't exist
@@ -95,27 +146,56 @@ export async function POST(request: NextRequest) {
     }
     
     console.log('Starting file upload to Supabase...');
+    console.log('Upload parameters:', {
+      fileName,
+      contentType: image.type,
+      bufferLength: buffer.length
+    });
+    
     // Upload to Supabase Storage
-    const { data, error } = await supabase.storage
-      .from('marketing-images')
-      .upload(fileName, buffer, {
-        contentType: image.type,
-        cacheControl: '3600',
-        upsert: false
-      });
-
-    if (error) {
-      console.error('Supabase upload error:', error);
-      return NextResponse.json({ error: `Upload failed: ${error.message}` }, { status: 500 });
+    let uploadResult;
+    try {
+      uploadResult = await supabase.storage
+        .from('marketing-images')
+        .upload(fileName, buffer, {
+          contentType: image.type,
+          cacheControl: '3600',
+          upsert: false
+        });
+    } catch (uploadError) {
+      console.error('Upload exception:', uploadError);
+      return NextResponse.json({ 
+        error: 'Upload failed',
+        details: uploadError instanceof Error ? uploadError.message : 'Unknown error'
+      }, { status: 500 });
     }
 
-    console.log('File uploaded successfully:', data);
+    if (uploadResult.error) {
+      console.error('Supabase upload error:', uploadResult.error);
+      console.error('Error details:', {
+        message: uploadResult.error.message,
+        statusCode: uploadResult.error.statusCode,
+        error: uploadResult.error.error
+      });
+      return NextResponse.json({ error: `Upload failed: ${uploadResult.error.message}` }, { status: 500 });
+    }
+
+    console.log('File uploaded successfully:', uploadResult.data);
 
     console.log('Getting public URL...');
     // Get public URL
-    const { data: urlData } = supabase.storage
-      .from('marketing-images')
-      .getPublicUrl(fileName);
+    let urlData;
+    try {
+      urlData = supabase.storage
+        .from('marketing-images')
+        .getPublicUrl(fileName);
+    } catch (urlError) {
+      console.error('URL generation error:', urlError);
+      return NextResponse.json({ 
+        error: 'Failed to generate public URL',
+        details: urlError instanceof Error ? urlError.message : 'Unknown error'
+      }, { status: 500 });
+    }
 
     console.log('Public URL generated:', urlData.publicUrl);
 

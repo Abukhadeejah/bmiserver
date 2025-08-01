@@ -85,17 +85,23 @@ export default function CategoryUploadPage() {
       uploadFormData.append('email', '');
 
       // Upload image
+      console.log('Starting upload...');
       const response = await fetch('/api/upload-image', {
         method: 'POST',
         body: uploadFormData,
       });
 
+      console.log('Response status:', response.status);
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+
       if (!response.ok) {
         const errorText = await response.text();
+        console.error('Upload error response:', errorText);
         throw new Error(`Upload failed with status ${response.status}: ${errorText}`);
       }
 
       const result = await response.json();
+      console.log('Upload result:', result);
 
       if (response.ok && result.success) {
         // Store upload info in localStorage for PDF generation
