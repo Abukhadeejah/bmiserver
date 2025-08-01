@@ -8,6 +8,13 @@ const createSupabaseClient = () => {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY;
 
+  console.log('Creating Supabase client with:', {
+    hasUrl: !!supabaseUrl,
+    hasServiceKey: !!supabaseServiceKey,
+    urlLength: supabaseUrl?.length || 0,
+    serviceKeyLength: supabaseServiceKey?.length || 0
+  });
+
   if (!supabaseUrl || !supabaseServiceKey) {
     console.error('Missing environment variables:', {
       hasUrl: !!supabaseUrl,
@@ -25,10 +32,24 @@ export async function POST(request: NextRequest) {
   try {
     console.log('=== UPLOAD API START ===');
     console.log('Request headers:', Object.fromEntries(request.headers.entries()));
+    console.log('Environment check:', {
+      hasUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
+      hasServiceKey: !!process.env.SUPABASE_SERVICE_KEY,
+      serviceKeyLength: process.env.SUPABASE_SERVICE_KEY?.length || 0
+    });
     
     // Create Supabase client inside the function
-    const supabase = createSupabaseClient();
-    console.log('Supabase client created successfully');
+    let supabase;
+    try {
+      supabase = createSupabaseClient();
+      console.log('Supabase client created successfully');
+    } catch (clientError) {
+      console.error('Supabase client creation error:', clientError);
+      return NextResponse.json({ 
+        error: 'Failed to create Supabase client',
+        details: clientError instanceof Error ? clientError.message : 'Unknown error'
+      }, { status: 500 });
+    }
     
     let formData;
     try {
