@@ -53,7 +53,16 @@ export default function CategoryUploadPage() {
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    console.log('File selected:', file);
+    
     if (file) {
+      console.log('File details:', {
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        lastModified: file.lastModified
+      });
+      
       setSelectedImage(file);
       
       // Create preview URL
@@ -72,23 +81,73 @@ export default function CategoryUploadPage() {
       return;
     }
 
+    if (loading) {
+      console.log('Upload already in progress');
+      return;
+    }
+
     setLoading(true);
 
     try {
       // Create FormData for upload
       const uploadFormData = new FormData();
-      uploadFormData.append('image', selectedImage);
+      
+      // Ensure the file is properly added
+      if (!selectedImage) {
+        throw new Error('No image selected');
+      }
+      
+      console.log('Selected image:', {
+        name: selectedImage.name,
+        size: selectedImage.size,
+        type: selectedImage.type
+      });
+      
+      // Validate file
+      if (!selectedImage.name || selectedImage.size === 0) {
+        throw new Error('Invalid file selected');
+      }
+      
+      uploadFormData.append('image', selectedImage, selectedImage.name);
       uploadFormData.append('category', selectedCategory);
       uploadFormData.append('customerName', 'Customer'); // Default name
       uploadFormData.append('customerId', Date.now().toString()); // Generate unique ID
       uploadFormData.append('phone', '');
       uploadFormData.append('email', '');
+      
+      // Verify FormData was created correctly
+      console.log('FormData created with entries:', Array.from(uploadFormData.entries()).map(([key, value]) => [key, typeof value]));
 
       // Upload image
       console.log('Starting upload...');
+      console.log('FormData entries:', Array.from(uploadFormData.entries()));
+      
+      // Verify FormData has the image
+      const imageEntry = uploadFormData.get('image');
+      console.log('Image in FormData:', imageEntry);
+      
+      // Create a new FormData instance to ensure it's fresh
+      const freshFormData = new FormData();
+      freshFormData.append('image', selectedImage, selectedImage.name);
+      freshFormData.append('category', selectedCategory);
+      freshFormData.append('customerName', 'Customer');
+      freshFormData.append('customerId', Date.now().toString());
+      freshFormData.append('phone', '');
+      freshFormData.append('email', '');
+      
+      console.log('Fresh FormData entries:', Array.from(freshFormData.entries()).map(([key, value]) => [key, typeof value]));
+      
+      // Log the FormData as a string to see what's being sent
+      const formDataString = Array.from(freshFormData.entries())
+        .map(([key, value]) => `${key}: ${value}`)
+        .join(', ');
+      console.log('FormData string:', formDataString);
+      
       const response = await fetch('/api/upload-image', {
         method: 'POST',
-        body: uploadFormData,
+        body: freshFormData,
+        // Add timeout and other options
+        signal: AbortSignal.timeout(30000), // 30 second timeout
       });
 
       console.log('Response status:', response.status);
