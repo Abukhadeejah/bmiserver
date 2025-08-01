@@ -47,23 +47,30 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No image provided' }, { status: 400 });
     }
 
-    // Delete old images for this customer if they exist
+    // Delete old images for this category only
     try {
+      console.log('Deleting old images for category:', category);
+      
       const { data: oldFiles } = await supabase.storage
         .from('marketing-images')
         .list('', {
-          search: `${category}-${customerId}-`
+          search: `${category}-` // Only search for files in this category
         });
 
-      if (oldFiles) {
+      if (oldFiles && oldFiles.length > 0) {
+        console.log('Found old files to delete:', oldFiles.map(f => f.name));
+        
         for (const file of oldFiles) {
           await supabase.storage
             .from('marketing-images')
             .remove([file.name]);
+          console.log('Deleted old file:', file.name);
         }
+      } else {
+        console.log('No old files found for category:', category);
       }
     } catch (error) {
-      // No old images to delete or error deleting
+      console.log('Error deleting old images:', error);
     }
 
     // Generate unique filename
