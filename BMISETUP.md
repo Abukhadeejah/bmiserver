@@ -173,6 +173,7 @@ JWT_SECRET=your_jwt_secret
 
 1. Create a new Supabase project
 2. Run the following SQL to create tables:
+3. Set up Supabase Storage for image uploads:
 
 ```sql
 -- Create Member table
@@ -234,7 +235,21 @@ CREATE TABLE "Notification" (
 );
 ```
 
-### 3. Installation
+### 3. Storage Setup
+
+Run the storage setup script to create the required Supabase Storage bucket:
+
+```bash
+# Run the storage setup script
+node setup-storage.js
+```
+
+This will create:
+- A `marketing-images` bucket for storing uploaded images
+- Public read access for PDF generation
+- Proper security policies for upload/delete operations
+
+### 4. Installation
 
 ```bash
 # Install dependencies
@@ -250,7 +265,7 @@ npm run build
 npm start
 ```
 
-### 4. Mobile Setup
+### 5. Mobile Setup
 
 ```bash
 # Install Capacitor
@@ -330,9 +345,10 @@ Currently logs messages to console. Replace with actual WhatsApp Business API.
 Modify `src/lib/notifications.ts` to customize PDF styling and content.
 
 ### Image Management
-- Images stored in `public/uploads/`
+- Images stored in Supabase Storage (`marketing-images` bucket)
 - Automatic cleanup of old images
 - Category-based organization (new/existing)
+- Public URLs for PDF generation
 
 ## Troubleshooting
 

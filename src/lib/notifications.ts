@@ -1,9 +1,19 @@
 import * as nodemailer from 'nodemailer';
-import { supabase } from './supabase';
+import { createClient } from '@supabase/supabase-js';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as React from 'react';
 import { renderToBuffer, Document, Page, Text, View, StyleSheet, Font, Image } from '@react-pdf/renderer';
+
+// Create client with service role key for storage operations
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY;
+
+if (!supabaseUrl || !supabaseServiceKey) {
+  throw new Error('Missing Supabase environment variables');
+}
+
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 // Add debugging for email configuration
 console.log('Email configuration check:');
@@ -428,48 +438,34 @@ export async function generateHealthReportPDF(bmiRecord: any, isNewCustomer: boo
         if (imageInfo.category === targetCategory) {
           
           if (imageInfo.filePath) {
-            // Try different path approaches for better compatibility
-            const possiblePaths = [
-              path.join(process.cwd(), 'public', imageInfo.filePath),
-              path.join(process.cwd(), imageInfo.filePath),
-              imageInfo.filePath
-            ];
-            
-            // Check if file exists
-            const fs = require('fs');
-            for (const imgPath of possiblePaths) {
-              if (fs.existsSync(imgPath)) {
-                marketingImageSrc = imgPath;
-                customerType = imageInfo.category;
-                break;
-              }
-            }
+            // Use the URL directly (Supabase Storage URL)
+            marketingImageSrc = imageInfo.filePath;
+            customerType = imageInfo.category;
           }
         }
         
         if (!marketingImageSrc) {
-          // Try to find existing images of the correct category
+          // Try to find existing images of the correct category from Supabase Storage
           try {
-            const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
-            if (fs.existsSync(uploadsDir)) {
-              const files = fs.readdirSync(uploadsDir);
-              
-              // Look for files matching the target category
-              const matchingFiles = files.filter((file: string) => 
-                file.includes(targetCategory) && 
-                file.match(/\.(jpg|jpeg|png|gif|webp)$/i)
+            const { data: files } = await (supabase as any).storage
+              .from('marketing-images')
+              .list('', {
+                search: targetCategory
+              });
+
+            if (files && files.length > 0) {
+              // Sort by timestamp (newest first) and take the first one
+              const sortedFiles = files.sort((a: any, b: any) => 
+                new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
               );
+              const selectedFile = sortedFiles[0];
               
-              // Use the most recent matching file
-              if (matchingFiles.length > 0) {
-                // Sort by timestamp (newest first) and take the first one
-                const sortedFiles = matchingFiles.sort().reverse();
-                const selectedFile = sortedFiles[0];
-                const selectedFilePath = path.join(uploadsDir, selectedFile);
-                
-                marketingImageSrc = selectedFilePath;
-                customerType = targetCategory;
-              }
+              const { data: urlData } = (supabase as any).storage
+                .from('marketing-images')
+                .getPublicUrl(selectedFile.name);
+              
+              marketingImageSrc = urlData.publicUrl;
+              customerType = targetCategory;
             }
           } catch (error) {
             console.error('Error finding marketing images:', error);

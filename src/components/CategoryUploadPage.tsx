@@ -90,9 +90,14 @@ export default function CategoryUploadPage() {
         body: uploadFormData,
       });
 
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Upload failed with status ${response.status}: ${errorText}`);
+      }
+
       const result = await response.json();
 
-      if (response.ok) {
+      if (response.ok && result.success) {
         // Store upload info in localStorage for PDF generation
         const uploadInfo = {
           filePath: result.filePath,
@@ -118,11 +123,12 @@ export default function CategoryUploadPage() {
           fileInputRef.current.value = '';
         }
       } else {
-        throw new Error(result.error || 'Upload failed');
+        const errorMessage = result.error || `Upload failed with status: ${response.status}`;
+        throw new Error(errorMessage);
       }
     } catch (error) {
-      console.error('Upload error');
-      alert('Upload failed. Please try again.');
+      const errorMessage = error instanceof Error ? error.message : 'Upload failed. Please try again.';
+      alert(errorMessage);
     } finally {
       setLoading(false);
     }
