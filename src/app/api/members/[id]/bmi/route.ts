@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { supabase } from '@/lib/supabase';
 import { sendNotifications } from '@/lib/notifications';
 
 export const dynamic = 'force-dynamic';
@@ -47,8 +47,10 @@ export async function POST(
       return value?.toString().trim() === '' ? null : Number(value);
     };
     
-    const bmiRecord = await prisma.bMIRecord.create({
-      data: {
+    // Create BMI record using Supabase
+    const { data: bmiRecord, error: bmiError } = await supabase
+      .from('BMIRecord')
+      .insert({
         memberId,
         height: Number(height),
         weight: Number(weight),
@@ -64,17 +66,28 @@ export async function POST(
         restingMetabolism: numOrNull(restingMetabolism),
         biologicalAge: numOrNull(biologicalAge),
         healthConclusion: healthConclusion || null
-      },
-      include: {
-        member: true
-      }
-    });
+      })
+      .select(`
+        *,
+        member:Member(*)
+      `)
+      .single();
+
+    if (bmiError) {
+      console.error('BMI record creation error:', bmiError);
+      return NextResponse.json({ error: 'Failed to create BMI record' }, { status: 500 });
+    }
     
-     // Update member to existing customer if not already
-     await prisma.member.update({
-      where: { id: memberId },
-      data: { customerType: 'existing' }
-    });
+    // Update member to existing customer if not already
+    const { error: memberError } = await supabase
+      .from('Member')
+      .update({ customerType: 'existing' })
+      .eq('id', memberId);
+
+    if (memberError) {
+      console.error('Member update error:', memberError);
+      // Don't fail the request if member update fails
+    }
 
     // Send notifications with uploaded image info if available
     if (uploadedImageInfo) {
@@ -82,14 +95,14 @@ export async function POST(
       process.env.UPLOADED_IMAGE_INFO = JSON.stringify(uploadedImageInfo);
     }
     
-    sendNotifications(bmiRecord).catch(console.error);
+    await sendNotifications(bmiRecord);
     
     // Clear the environment variable after notifications
     delete process.env.UPLOADED_IMAGE_INFO;
     
     return NextResponse.json(bmiRecord);
   } catch (error) {
-    console.error('BMI recording error');
+    console.error('BMI recording error:', error);
     return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
 }

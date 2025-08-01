@@ -53,27 +53,61 @@ export default function UploadImagePage() {
     e.preventDefault();
     setLoading(true);
 
+    if (!selectedImage) {
+      alert('Please select an image first');
+      setLoading(false);
+      return;
+    }
+
     try {
-      // Simulate upload process
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Uploading image for category
-      alert(`${activeCategory === 'new' ? 'New' : 'Existing'} customer image uploaded successfully!`);
-      
-      // Reset form
-      setSelectedImage(null);
-      setImagePreview(null);
-      setFormData({
-        customerName: '',
-        customerId: '',
-        phone: '',
-        email: ''
+      // Create FormData for file upload
+      const uploadFormData = new FormData();
+      uploadFormData.append('image', selectedImage);
+      uploadFormData.append('category', activeCategory);
+      uploadFormData.append('customerName', formData.customerName || 'Marketing Image');
+      uploadFormData.append('customerId', formData.customerId || Date.now().toString());
+
+      // Upload to server
+      const response = await fetch('/api/upload-image', {
+        method: 'POST',
+        body: uploadFormData
       });
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
+
+      if (!response.ok) {
+        throw new Error('Upload failed');
+      }
+
+      const result = await response.json();
+      
+      if (result.success) {
+        // Store the uploaded image info in localStorage for PDF generation
+        const imageInfo = {
+          filePath: result.filePath,
+          category: result.category,
+          customerName: result.customerName,
+          customerId: result.customerId
+        };
+        localStorage.setItem('uploadedImageInfo', JSON.stringify(imageInfo));
+        
+        alert(`${activeCategory === 'new' ? 'New' : 'Existing'} customer image uploaded successfully!`);
+        
+        // Reset form
+        setSelectedImage(null);
+        setImagePreview(null);
+        setFormData({
+          customerName: '',
+          customerId: '',
+          phone: '',
+          email: ''
+        });
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
+      } else {
+        throw new Error(result.error || 'Upload failed');
       }
     } catch (error) {
-      console.error('Upload error');
+      console.error('Upload error:', error);
       alert('Upload failed. Please try again.');
     } finally {
       setLoading(false);

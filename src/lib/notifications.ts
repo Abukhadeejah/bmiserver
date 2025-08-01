@@ -1,11 +1,19 @@
-import nodemailer from 'nodemailer';
-import chromium from 'chrome-aws-lambda';
-import puppeteer from 'puppeteer-core';
+import * as nodemailer from 'nodemailer';
 import { supabase } from './supabase';
-import fs from 'fs';
-import path from 'path';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as React from 'react';
+import { renderToBuffer, Document, Page, Text, View, StyleSheet, Font, Image } from '@react-pdf/renderer';
 
-const transporter = nodemailer.createTransporter({
+// Add debugging for email configuration
+console.log('Email configuration check:');
+console.log('SMTP_HOST:', process.env.SMTP_HOST ? 'Set' : 'Not set');
+console.log('SMTP_PORT:', process.env.SMTP_PORT ? 'Set' : 'Not set');
+console.log('SMTP_USER:', process.env.SMTP_USER ? 'Set' : 'Not set');
+console.log('SMTP_PASS:', process.env.SMTP_PASS ? 'Set' : 'Not set');
+console.log('GYM_EMAIL:', process.env.GYM_EMAIL ? 'Set' : 'Not set');
+
+const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
   port: parseInt(process.env.SMTP_PORT!),
   secure: false,
@@ -15,8 +23,18 @@ const transporter = nodemailer.createTransporter({
   },
 });
 
+// Verify transporter configuration
+transporter.verify(function(error, success) {
+  if (error) {
+    console.error('❌ Email transporter verification failed:', error);
+  } else {
+    console.log('✅ Email transporter is ready to send messages');
+  }
+});
+
 export async function sendNotifications(bmiRecord: any) {
   try {
+    
     const { data: notification, error } = await supabase
       .from('Notification')
       .insert({
@@ -31,12 +49,20 @@ export async function sendNotifications(bmiRecord: any) {
       return;
     }
 
+    console.log('✅ Notification record created with ID:', notification.id);
+
     if (bmiRecord.member.phone) {
+      console.log('📱 Sending WhatsApp message...');
       await sendWhatsAppMessage(bmiRecord, notification.id);
+    } else {
+      console.log('📱 No phone number found, skipping WhatsApp');
     }
 
     if (bmiRecord.member.email) {
+      console.log('📧 Sending email...');
       await sendEmailReport(bmiRecord, notification.id);
+    } else {
+      console.log('📧 No email found, skipping email');
     }
   } catch (error) {
     console.error('Notification error:', error);
@@ -66,9 +92,24 @@ async function sendWhatsAppMessage(bmiRecord: any, notificationId: number) {
 
 async function sendEmailReport(bmiRecord: any, notificationId: number) {
   try {
-    console.log('Starting email report generation...');
+    console.log('📧 Starting email report generation...');
+    
+    // Check if email configuration is complete
+    if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS || !process.env.GYM_EMAIL) {
+      console.error('❌ Email configuration incomplete. Missing required environment variables.');
+      console.error('Required: SMTP_HOST, SMTP_USER, SMTP_PASS, GYM_EMAIL');
+      await supabase
+        .from('Notification')
+        .update({ emailStatus: 'failed', emailSent: false })
+        .eq('id', notificationId);
+      return;
+    }
+    
     const isNewCustomer = bmiRecord.member.customerType === 'new';
+    console.log('📧 Generating PDF for customer type:', isNewCustomer ? 'new' : 'existing');
+    
     const pdfBuffer = await generateHealthReportPDF(bmiRecord, isNewCustomer);
+    console.log('📧 PDF generated successfully, size:', pdfBuffer.length, 'bytes');
     
     const mailOptions = {
       from: process.env.GYM_EMAIL,
@@ -82,21 +123,32 @@ async function sendEmailReport(bmiRecord: any, notificationId: number) {
       }]
     };
     
-    console.log('Sending email to:', bmiRecord.member.email);
-    await transporter.sendMail(mailOptions);
+    console.log('📧 Sending email to:', bmiRecord.member.email);
+    console.log('📧 From:', process.env.GYM_EMAIL);
+    console.log('📧 Subject:', mailOptions.subject);
+    
+    const result = await transporter.sendMail(mailOptions);
     console.log('✅ Email sent successfully');
+    console.log('📧 Message ID:', result.messageId);
     
     await supabase
       .from('Notification')
       .update({ emailSent: true, emailStatus: 'sent' })
       .eq('id', notificationId);
+      
+    console.log('✅ Notification record updated successfully');
   } catch (error) {
     console.error('❌ Email sending failed:', error);
+    console.error('❌ Error details:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      code: (error as any)?.code,
+      command: (error as any)?.command
+    });
+    
     await supabase
       .from('Notification')
-      .update({ emailStatus: 'failed' })
+      .update({ emailStatus: 'failed', emailSent: false })
       .eq('id', notificationId);
-    throw error;
   }
 }
 
@@ -214,101 +266,217 @@ Visit: ${process.env.GYM_ADDRESS}`;
   }
 }
 
-export async function generateHealthReportPDF(bmiRecord: any, isNewCustomer: boolean, externalBrowser?: any): Promise<Buffer> {
-  let browser = null;
-  let shouldCloseBrowser = true;
-  
+// Register default font
+Font.register({
+  family: 'Helvetica',
+  src: 'Helvetica'
+});
+
+// Create styles for PDF
+const pdfStyles = StyleSheet.create({
+  page: {
+    flexDirection: 'column',
+    backgroundColor: '#ffffff',
+    padding: 30,
+    fontFamily: 'Helvetica',
+  },
+  header: {
+    fontSize: 24,
+    textAlign: 'center',
+    marginBottom: 20,
+    color: '#2563eb',
+    fontFamily: 'Helvetica',
+  },
+  headerContainer: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  logo: {
+    width: 350, // Increased from 280
+    height: 175, // Increased from 140
+    objectFit: 'contain',
+  },
+  section: {
+    margin: 10,
+    padding: 10,
+  },
+  title: {
+    fontSize: 22,
+    marginBottom: 15,
+    color: '#1f2937',
+    fontFamily: 'Helvetica',
+    textAlign: 'center',
+  },
+  subtitle: {
+    fontSize: 14,
+    marginBottom: 10,
+    color: '#374151',
+    fontFamily: 'Helvetica',
+    textAlign: 'center',
+    fontWeight: 'bold',
+  },
+  row: {
+    flexDirection: 'row',
+    marginBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+    paddingBottom: 5,
+  },
+  label: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    width: '40%',
+    color: '#374151',
+    fontFamily: 'Helvetica',
+  },
+  value: {
+    fontSize: 12,
+    width: '60%',
+    color: '#1f2937',
+    fontFamily: 'Helvetica',
+  },
+  tableHeader: {
+    flexDirection: 'row',
+    backgroundColor: '#f3f4f6',
+    padding: 8,
+    marginBottom: 5,
+  },
+  tableHeaderCell: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#374151',
+    fontFamily: 'Helvetica',
+  },
+  tableRow: {
+    flexDirection: 'row',
+    padding: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  tableCell: {
+    fontSize: 11,
+    color: '#1f2937',
+    fontFamily: 'Helvetica',
+  },
+  conclusion: {
+    fontSize: 16,
+    color: '#dc2626',
+    marginTop: 15,
+    marginBottom: 10,
+    fontFamily: 'Helvetica',
+  },
+  conclusionText: {
+    fontSize: 12,
+    color: '#1f2937',
+    marginLeft: 10,
+    fontFamily: 'Helvetica',
+  },
+
+  link: {
+    fontSize: 12,
+    color: '#2563eb',
+    textDecoration: 'underline',
+    fontFamily: 'Helvetica',
+  },
+  message: {
+    fontSize: 12,
+    color: '#1f2937',
+    marginTop: 15,
+    lineHeight: 1.5,
+    fontFamily: 'Helvetica',
+  },
+            marketingImageContainer: {
+            flex: 1,
+            justifyContent: 'center',
+            alignItems: 'center',
+            padding: 20,
+            height: '100%',
+          },
+          marketingImage: {
+            width: '95%',
+            height: '95%',
+            objectFit: 'contain',
+            maxWidth: '100%',
+            maxHeight: '100%',
+          },
+  parameter: { width: '40%' },
+  valueCell: { width: '30%' },
+  reference: { width: '30%' },
+});
+
+export async function generateHealthReportPDF(bmiRecord: any, isNewCustomer: boolean): Promise<Buffer> {
   try {
-    console.log('Starting PDF generation...');
+    console.log('Starting PDF generation with @react-pdf/renderer...');
     
-    // Use external browser if provided, otherwise create new one
-    if (externalBrowser) {
-      browser = externalBrowser;
-      shouldCloseBrowser = false; // Don't close external browser
-    } else {
-      // Launch browser with serverless configuration
-      browser = await puppeteer.launch({
-        args: [
-          ...chromium.args,
-          '--disable-web-security',
-          '--disable-features=VizDisplayCompositor',
-          '--no-sandbox',
-          '--disable-setuid-sandbox'
-        ],
-        defaultViewport: chromium.defaultViewport,
-        executablePath: await chromium.executablePath,
-        headless: chromium.headless,
-        ignoreHTTPSErrors: true,
-      });
-    }
-
-    console.log('Browser ready for PDF generation');
-
     const gymName = process.env.GYM_NAME || 'Your Gym Name';
     
-    // Embed logo as base64 data URI
-    const logoFilePath = path.join(process.cwd(), 'public', 'logo.png');
-    let logoSrc = '';
-    try {
-      const logoData = fs.readFileSync(logoFilePath);
-      logoSrc = `data:image/png;base64,${logoData.toString('base64')}`;
-    } catch (e) {
-      console.log('Logo not found, proceeding without logo');
-      logoSrc = '';
-    }
-
-    // Check for uploaded images in the uploads directory
-    let uploadedImageSrc = '';
-    let uploadedImageCategory = '';
-    let uploadedImageCustomerName = '';
+    // Get the absolute path to the logo
+        const logoPath = path.join(process.cwd(), 'public', 'logo.png');
     
-    // Check for uploaded image info from environment variable (for API route usage)
+        // Get uploaded marketing image info based on customer type
+    let marketingImageSrc = '';
+    let customerType = '';
+    
+    // Determine which image category to use based on member's customer type
+    const targetCategory = bmiRecord.member.customerType === 'new' ? 'new' : 'existing';
+    
     if (process.env.UPLOADED_IMAGE_INFO) {
       try {
         const imageInfo = JSON.parse(process.env.UPLOADED_IMAGE_INFO);
-        uploadedImageSrc = imageInfo.src;
-        uploadedImageCategory = imageInfo.category;
-        uploadedImageCustomerName = imageInfo.customerName;
-      } catch (e) {
-        console.log('Error parsing uploaded image info from environment');
-      }
-    } else {
-      // Fallback to checking uploads directory
-      try {
-        const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
-        if (fs.existsSync(uploadsDir)) {
-          const files = fs.readdirSync(uploadsDir);
-          if (files.length > 0) {
-            // Get the most recent uploaded image
-            const imageFiles = files.filter(file => 
-              file.match(/\.(jpg|jpeg|png|gif|webp)$/i)
-            );
+        
+        // Check if the uploaded image matches the customer type
+        if (imageInfo.category === targetCategory) {
+          
+          if (imageInfo.filePath) {
+            // Try different path approaches for better compatibility
+            const possiblePaths = [
+              path.join(process.cwd(), 'public', imageInfo.filePath),
+              path.join(process.cwd(), imageInfo.filePath),
+              imageInfo.filePath
+            ];
             
-            if (imageFiles.length > 0) {
-              // Sort by modification time to get the most recent
-              const sortedFiles = imageFiles.sort((a, b) => {
-                const statA = fs.statSync(path.join(uploadsDir, a));
-                const statB = fs.statSync(path.join(uploadsDir, b));
-                return statB.mtime.getTime() - statA.mtime.getTime();
-              });
-              
-              const latestImage = sortedFiles[0];
-              const imagePath = path.join(uploadsDir, latestImage);
-              const imageData = fs.readFileSync(imagePath);
-              uploadedImageSrc = `data:image/png;base64,${imageData.toString('base64')}`;
-              
-              // Extract category from filename (format: category-timestamp.extension)
-              const fileNameParts = latestImage.split('-');
-              if (fileNameParts.length >= 2) {
-                uploadedImageCategory = fileNameParts[0]; // 'new' or 'existing'
-                uploadedImageCustomerName = 'Customer'; // Default name
+            // Check if file exists
+            const fs = require('fs');
+            for (const imgPath of possiblePaths) {
+              if (fs.existsSync(imgPath)) {
+                marketingImageSrc = imgPath;
+                customerType = imageInfo.category;
+                break;
               }
             }
           }
         }
+        
+        if (!marketingImageSrc) {
+          // Try to find existing images of the correct category
+          try {
+            const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
+            if (fs.existsSync(uploadsDir)) {
+              const files = fs.readdirSync(uploadsDir);
+              
+              // Look for files matching the target category
+              const matchingFiles = files.filter((file: string) => 
+                file.includes(targetCategory) && 
+                file.match(/\.(jpg|jpeg|png|gif|webp)$/i)
+              );
+              
+              // Use the most recent matching file
+              if (matchingFiles.length > 0) {
+                // Sort by timestamp (newest first) and take the first one
+                const sortedFiles = matchingFiles.sort().reverse();
+                const selectedFile = sortedFiles[0];
+                const selectedFilePath = path.join(uploadsDir, selectedFile);
+                
+                marketingImageSrc = selectedFilePath;
+                customerType = targetCategory;
+              }
+            }
+          } catch (error) {
+            console.error('Error finding marketing images:', error);
+          }
+        }
       } catch (e) {
-        console.log('No uploaded images found or error reading uploads directory');
-        uploadedImageSrc = '';
+        console.error('Error parsing uploaded image info:', e);
       }
     }
 
@@ -335,158 +503,95 @@ export async function generateHealthReportPDF(bmiRecord: any, isNewCustomer: boo
       ['Body Mass index', bmiRecord.bmi || '-', '(18.5 to 24.9, it falls within the Healthy Weight range)'],
     ];
 
-    const html = `
-    <html>
-      <head>
-        <meta charset="utf-8" />
-        <title>Health Report</title>
-        <style>
-          @page { margin: 30mm 20mm 30mm 20mm; }
-          body { font-family: Arial, sans-serif; margin: 0; }
-          .page { page-break-after: always; }
-          .header { text-align: center; margin-bottom: 20px; }
-          .gym-logo-header { display: flex; flex-direction: column; align-items: center; margin-bottom: 8px; }
-          .gym-logo { height: 150px; width: auto; margin-bottom: 8px; }
-          .section-title { font-size: 22px; font-weight: bold; margin: 24px 0 15px 0; }
-          .attend-by { font-size: 18px; font-weight: bold; text-align: center; margin-bottom: 15px; }
-          table { border-collapse: collapse; width: 100%; margin-bottom: 25px; }
-          td, th { border: 1px solid #bbb; padding: 10px 15px; font-size: 17px; }
-          th { background: #f0f0f0; font-weight: bold; }
-          .conclusion-title { color: #d32f2f; font-size: 22px; font-weight: bold; margin-top: 25px; }
-          .conclusion { margin-left: 18px; font-size: 17px; }
-          .custom-msg { font-size: 17px; font-weight: bold; margin-top: 25px; }
-          .blue-link { color: #2563eb; text-decoration: underline; font-size: 17px; }
-          .uploaded-image-container { 
-            text-align: center; 
-            margin: 20px;
-            padding: 20px;
-            height: calc(100vh - 80px);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-          }
-          .uploaded-image { 
-            max-width: 100%;
-            max-height: 100%;
-            object-fit: contain;
-            border: 2px solid #ddd; 
-            border-radius: 8px;
-            background: white;
-            padding: 10px;
-          }
-          .image-caption { font-size: 16px; color: #666; margin-top: 8px; }
-        </style>
-      </head>
-      <body>
-        <!-- PAGE 1: Personal Details -->
-        <div class="page">
-          <div class="header">
-            <div class="gym-logo-header">
-              ${logoSrc ? `<img src="${logoSrc}" class="gym-logo" alt="Logo" />` : `<h2>${gymName}</h2>`}
-            </div>
-          </div>
-          <div class="section-title">Personal Details of ${bmiRecord.member.name} :</div>
-          <div class="attend-by">Attend By: ${bmiRecord.attendedBy || 'Staff'}</div>
-          <table>
-            <tbody>
-              ${personalRows.map(row => `
-                <tr>
-                  <td style="font-weight:bold;">${row[0]}</td>
-                  <td>${row[1]}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        </div>
+    // Generate PDF using React PDF renderer with error handling
+    let pdfBuffer;
+    try {
+      pdfBuffer = await renderToBuffer(
+        React.createElement(Document, {}, [
+          // Page 1: Personal Details
+          React.createElement(Page, { key: 'page1', size: 'A4', style: pdfStyles.page }, [
+            React.createElement(View, { key: 'header1', style: pdfStyles.headerContainer }, [
+              React.createElement(Image, { key: 'logo1', src: logoPath, style: pdfStyles.logo, cache: false })
+            ]),
+            React.createElement(Text, { key: 'title1', style: pdfStyles.title }, `Personal Details of ${bmiRecord.member.name} :`),
+            React.createElement(Text, { key: 'subtitle1', style: pdfStyles.subtitle }, `Attend By: ${bmiRecord.attendedBy || 'Staff'}`),
+            React.createElement(View, { key: 'section1', style: pdfStyles.section }, 
+              personalRows.map((row, index) => 
+                React.createElement(View, { key: `row${index}`, style: pdfStyles.row }, [
+                  React.createElement(Text, { key: `label${index}`, style: pdfStyles.label }, row[0]),
+                  React.createElement(Text, { key: `value${index}`, style: pdfStyles.value }, row[1])
+                ])
+              )
+            )
+          ]),
+          
+          // Page 2: BMI Report
+          React.createElement(Page, { key: 'page2', size: 'A4', style: pdfStyles.page }, [
+            React.createElement(View, { key: 'header2', style: pdfStyles.headerContainer }, [
+              React.createElement(Image, { key: 'logo2', src: logoPath, style: pdfStyles.logo, cache: false })
+            ]),
+            React.createElement(Text, { key: 'title2', style: pdfStyles.title }, `BMI Report of ${bmiRecord.member.name} :`),
+            React.createElement(View, { key: 'section2', style: pdfStyles.section }, [
+              React.createElement(View, { key: 'tableHeader', style: pdfStyles.tableHeader }, [
+                React.createElement(Text, { key: 'paramHeader', style: [pdfStyles.tableHeaderCell, pdfStyles.parameter] }, 'Parameter'),
+                React.createElement(Text, { key: 'valueHeader', style: [pdfStyles.tableHeaderCell, pdfStyles.valueCell] }, 'Value'),
+                React.createElement(Text, { key: 'refHeader', style: [pdfStyles.tableHeaderCell, pdfStyles.reference] }, 'Reference')
+              ]),
+              ...bmiRows.map((row, index) => 
+                React.createElement(View, { key: `bmiRow${index}`, style: pdfStyles.tableRow }, [
+                  React.createElement(Text, { key: `param${index}`, style: [pdfStyles.tableCell, pdfStyles.parameter] }, row[0]),
+                  React.createElement(Text, { key: `value${index}`, style: [pdfStyles.tableCell, pdfStyles.valueCell] }, row[1]),
+                  React.createElement(Text, { key: `ref${index}`, style: [pdfStyles.tableCell, pdfStyles.reference] }, row[2])
+                ])
+              ),
+              ...(bmiRecord.healthConclusion ? [
+                React.createElement(Text, { key: 'conclusion', style: pdfStyles.conclusion }, 'Health Report Conclusion -'),
+                React.createElement(Text, { key: 'conclusionText', style: pdfStyles.conclusionText }, `• "${String(bmiRecord.healthConclusion)}"`)
+              ] : [])
+            ])
+          ]),
+          
+          // Page 3: Marketing Image
+          React.createElement(Page, { key: 'page3', size: 'A4', style: pdfStyles.page }, [
+            React.createElement(View, { key: 'marketingImageContainer', style: pdfStyles.marketingImageContainer }, 
+              marketingImageSrc && marketingImageSrc !== '' ? 
+                React.createElement(Image, { 
+                  key: 'marketingImage', 
+                  src: marketingImageSrc, 
+                  style: pdfStyles.marketingImage,
+                  cache: false
+                }) :
+                React.createElement(View, { key: 'noImagePlaceholder', style: { flex: 1, justifyContent: 'center', alignItems: 'center' } }, [
+                  React.createElement(Text, { key: 'placeholder1', style: { fontSize: 16, color: '#666', textAlign: 'center' } }, 'No marketing image uploaded'),
+                  React.createElement(Text, { key: 'placeholder2', style: { fontSize: 12, color: '#999', textAlign: 'center', marginTop: 10 } }, 'Upload a marketing image through the admin panel')
+                ])
+            )
+          ]),
+          
+          // Page 4: Custom Message
+          React.createElement(Page, { key: 'page4', size: 'A4', style: pdfStyles.page }, [
+            React.createElement(View, { key: 'header4', style: pdfStyles.headerContainer }, [
+              React.createElement(Image, { key: 'logo4', src: logoPath, style: pdfStyles.logo, cache: false })
+            ]),
+            React.createElement(Text, { key: 'title4', style: pdfStyles.title }, 'Check out our gym location & Reviews on the map:'),
+            React.createElement(Text, { key: 'link', style: pdfStyles.link }, `${gymName} Link: https://g.co/kgs/mQtKEQ`),
+            React.createElement(Text, { key: 'message', style: pdfStyles.message }, 
+              'Experience a personalised tour of our gym and explore our latest offers with one of our trainers. Don\'t miss out!'
+            )
+          ])
+        ])
+      );
+    } catch (renderError) {
+      console.error('PDF render error:', renderError);
+      const errorMessage = renderError instanceof Error ? renderError.message : 'Unknown PDF generation error';
+      throw new Error(`PDF generation failed: ${errorMessage}`);
+    }
 
-        <!-- PAGE 2: BMI Report -->
-        <div class="page">
-          <div class="header">
-            <div class="gym-logo-header">
-              ${logoSrc ? `<img src="${logoSrc}" class="gym-logo" alt="Logo" />` : `<h2>${gymName}</h2>`}
-            </div>
-          </div>
-          <div class="section-title">BMI Report of ${bmiRecord.member.name} :</div>
-          <table>
-            <thead>
-              <tr>
-                <th>Parameter</th>
-                <th>Value</th>
-                <th>Reference</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${bmiRows.map(row => `
-                <tr>
-                  <td>${row[0]}</td>
-                  <td>${row[1]}</td>
-                  <td>${row[2]}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-          ${bmiRecord.healthConclusion ? `
-            <div class="conclusion-title">Health Report Conclusion -</div>
-            <div class="conclusion">• "${String(bmiRecord.healthConclusion)}"</div>
-          ` : ''}
-        </div>
-
-        <!-- PAGE 3: Uploaded Image -->
-        <div class="page">
-          ${uploadedImageSrc ? `
-            <div class="uploaded-image-container">
-              <img src="${uploadedImageSrc}" class="uploaded-image" alt="Customer Image" />
-            </div>
-          ` : `
-            <div style="text-align: center; margin: 40px 0; color: #666;">
-              <p>No customer image has been uploaded yet.</p>
-              <p>Upload an image through the admin panel to see it here.</p>
-            </div>
-          `}
-        </div>
-
-        <!-- PAGE 4: Custom Message -->
-        <div class="page">
-          <div class="header">
-            <div class="gym-logo-header">
-              ${logoSrc ? `<img src="${logoSrc}" class="gym-logo" alt="Logo" />` : `<h2>${gymName}</h2>`}
-            </div>
-          </div>
-          <div class="section-title">Check out our gym location & Reviews on the map:</div>
-          <div>
-            <a class="blue-link" href="https://g.co/kgs/mQtKEQ" target="_blank">${gymName} Link: https://g.co/kgs/mQtKEQ</a>
-          </div>
-          <div class="custom-msg">
-            Experience a personalised tour of our gym and explore our latest offers with one of our trainers. Don't miss out!
-          </div>
-        </div>
-      </body>
-    </html>
-    `;
-
-    const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: 'networkidle0' });
-
-    const pdfBuffer = await page.pdf({
-      format: 'A4',
-      printBackground: true,
-      margin: { top: '20mm', right: '15mm', bottom: '20mm', left: '15mm' }
-    });
-
-    await page.close();
-    console.log('PDF generated successfully');
-    
-    return Buffer.from(pdfBuffer);
+    return pdfBuffer;
 
   } catch (error) {
     console.error('PDF generation error:', error);
     throw error;
-  } finally {
-    // Only close browser if we created it (not if it was passed externally)
-    if (browser && shouldCloseBrowser) {
-      await browser.close();
-      console.log('Browser closed');
-    }
   }
 }
 

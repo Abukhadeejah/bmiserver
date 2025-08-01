@@ -1,14 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateHealthReportPDF } from '@/lib/notifications';
 import { supabase } from '@/lib/supabase';
-import chromium from 'chrome-aws-lambda';
-import puppeteer from 'puppeteer-core';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
-  let browser = null;
-  
   try {
     console.log('Starting PDF generation API...');
     
@@ -28,28 +24,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'BMI record not found' }, { status: 404 });
     }
 
-    // Launch browser with serverless configuration
-    browser = await puppeteer.launch({
-      args: [
-        ...chromium.args,
-        '--disable-web-security',
-        '--disable-features=VizDisplayCompositor',
-      ],
-      defaultViewport: chromium.defaultViewport,
-      executablePath: await chromium.executablePath,
-      headless: chromium.headless,
-      ignoreHTTPSErrors: true,
-    });
-
-    console.log('Browser launched successfully');
-
     // Set uploaded image info as environment variable for PDF generation
     if (uploadedImageInfo) {
       process.env.UPLOADED_IMAGE_INFO = JSON.stringify(uploadedImageInfo);
     }
 
-    // Generate PDF with browser instance
-    const pdfBuffer = await generateHealthReportPDF(bmiRecord, true, browser);
+    // Generate PDF
+    const pdfBuffer = await generateHealthReportPDF(bmiRecord, true);
 
     // Clear the environment variable
     delete process.env.UPLOADED_IMAGE_INFO;
@@ -67,13 +48,7 @@ export async function POST(request: NextRequest) {
     console.error('PDF generation error:', error);
     return NextResponse.json({ 
       error: 'PDF generation failed',
-      details: error.message 
+      details: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });
-  } finally {
-    // Always close browser to prevent memory leaks
-    if (browser) {
-      await browser.close();
-      console.log('Browser closed');
-    }
   }
 }

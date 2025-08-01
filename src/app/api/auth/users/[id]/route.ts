@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { supabase } from '@/lib/supabase';
 import { validateEnvironment } from '@/lib/env-validation';
 
 export const dynamic = 'force-dynamic';
@@ -37,42 +37,44 @@ export async function PUT(
     }
 
     // Check if user exists
-    const existingUser = await prisma.userPass.findUnique({
-      where: { id: userId }
-    });
+    const { data: existingUser } = await supabase
+      .from('UserPass')
+      .select('id')
+      .eq('id', userId)
+      .single();
 
     if (!existingUser) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
     // Check if new username already exists (excluding current user)
-    const usernameExists = await prisma.userPass.findFirst({
-      where: {
-        username: username,
-        id: { not: userId }
-      }
-    });
+    const { data: usernameExists } = await supabase
+      .from('UserPass')
+      .select('id')
+      .eq('username', username)
+      .neq('id', userId)
+      .single();
 
     if (usernameExists) {
       return NextResponse.json({ error: 'Username already exists' }, { status: 409 });
     }
 
     // Update user with plain text password
-    const updatedUser = await prisma.userPass.update({
-      where: { id: userId },
-      data: {
+    const { data: updatedUser, error: updateError } = await supabase
+      .from('UserPass')
+      .update({
         username: username,
         password: password,
         role: role
-      },
-      select: {
-        id: true,
-        username: true,
-        role: true,
-        isActive: true,
-        updatedAt: true
-      }
-    });
+      })
+      .eq('id', userId)
+      .select('id, username, role, isActive, updatedAt')
+      .single();
+
+    if (updateError) {
+      console.error('Update user error:', updateError);
+      return NextResponse.json({ error: 'Failed to update user' }, { status: 500 });
+    }
 
     return NextResponse.json({
       success: true,
@@ -96,18 +98,26 @@ export async function DELETE(
     const userId = parseInt(id, 10);
 
     // Check if user exists
-    const existingUser = await prisma.userPass.findUnique({
-      where: { id: userId }
-    });
+    const { data: existingUser } = await supabase
+      .from('UserPass')
+      .select('id')
+      .eq('id', userId)
+      .single();
 
     if (!existingUser) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
     // Delete user
-    await prisma.userPass.delete({
-      where: { id: userId }
-    });
+    const { error: deleteError } = await supabase
+      .from('UserPass')
+      .delete()
+      .eq('id', userId);
+
+    if (deleteError) {
+      console.error('Delete user error:', deleteError);
+      return NextResponse.json({ error: 'Failed to delete user' }, { status: 500 });
+    }
 
     return NextResponse.json({
       success: true,

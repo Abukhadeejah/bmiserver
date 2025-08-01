@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { writeFile, mkdir } from 'fs/promises';
-import path from 'path';
+import { writeFile, mkdir, unlink, readdir } from 'fs/promises';
+import * as path from 'path';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,6 +19,23 @@ export async function POST(request: NextRequest) {
     // Create uploads directory if it doesn't exist
     const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
     await mkdir(uploadsDir, { recursive: true });
+
+    // Delete old images for this customer if they exist
+    try {
+      const existingFiles = await readdir(uploadsDir);
+      const oldImages = existingFiles.filter(file => 
+        file.startsWith(`${category}-${customerId}-`) && 
+        file.match(/\.(jpg|jpeg|png|gif|webp)$/i)
+      );
+      
+      for (const oldImage of oldImages) {
+        const oldImagePath = path.join(uploadsDir, oldImage);
+        await unlink(oldImagePath);
+        console.log(`Deleted old image: ${oldImage}`);
+      }
+    } catch (error) {
+      console.log('No old images to delete or error deleting:', error);
+    }
 
     // Generate unique filename
     const timestamp = Date.now();

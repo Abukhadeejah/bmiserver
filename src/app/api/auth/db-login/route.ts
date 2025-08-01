@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { supabase } from '@/lib/supabase';
 import { validateEnvironment } from '@/lib/env-validation';
 import { validateLogin } from '@/lib/validation';
 import { loginRateLimit } from '@/lib/rate-limit';
@@ -32,10 +32,17 @@ export async function POST(request: NextRequest) {
     const sanitizedUsername = username.trim();
     const sanitizedPassword = password.trim();
 
-    // 5. DATABASE QUERY - Find user securely
-    const user = await prisma.userPass.findUnique({
-      where: { username: sanitizedUsername }
-    });
+    // 5. DATABASE QUERY - Find user securely using Supabase
+    const { data: user, error } = await supabase
+      .from('UserPass')
+      .select('*')
+      .eq('username', sanitizedUsername)
+      .single();
+
+    if (error) {
+      console.error('Database login error');
+      return NextResponse.json({ error: 'Login failed. Please try again.' }, { status: 500 });
+    }
 
     // 6. USER VALIDATION - Check if user exists and is active
     if (!user) {

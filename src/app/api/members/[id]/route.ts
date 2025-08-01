@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { supabase } from '@/lib/supabase';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -13,9 +13,9 @@ export async function PUT(
     const memberId = parseInt(id);
     const { name, phone, email, dateOfBirth, relationshipStatus, serviceLooking, platform, customerType } = await request.json();
     
-    const updatedMember = await prisma.member.update({
-      where: { id: memberId },
-      data: {
+    const { data: updatedMember, error } = await supabase
+      .from('Member')
+      .update({
         name,
         phone,
         email,
@@ -24,8 +24,15 @@ export async function PUT(
         serviceLooking,
         platform,
         customerType
-      }
-    });
+      })
+      .eq('id', memberId)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Update member error:', error);
+      return NextResponse.json({ error: 'Server error' }, { status: 500 });
+    }
     
     return NextResponse.json(updatedMember);
   } catch (error) {
