@@ -47,7 +47,8 @@ export async function POST(request: NextRequest) {
       console.error('Supabase client creation error:', clientError);
       return NextResponse.json({ 
         error: 'Failed to create Supabase client',
-        details: clientError instanceof Error ? clientError.message : 'Unknown error'
+        details: clientError instanceof Error ? clientError.message : 'Unknown error',
+        step: 'supabase_client_creation'
       }, { status: 500 });
     }
     
@@ -58,7 +59,8 @@ export async function POST(request: NextRequest) {
       console.error('FormData parsing error:', formDataError);
       return NextResponse.json({ 
         error: 'Failed to parse form data',
-        details: formDataError instanceof Error ? formDataError.message : 'Unknown error'
+        details: formDataError instanceof Error ? formDataError.message : 'Unknown error',
+        step: 'formdata_parsing'
       }, { status: 400 });
     }
     
@@ -79,12 +81,18 @@ export async function POST(request: NextRequest) {
 
     if (!image) {
       console.error('No image in form data');
-      return NextResponse.json({ error: 'No image provided' }, { status: 400 });
+      return NextResponse.json({ 
+        error: 'No image provided',
+        step: 'image_validation'
+      }, { status: 400 });
     }
     
     if (!(image instanceof File)) {
       console.error('Image is not a File object:', typeof image);
-      return NextResponse.json({ error: 'Invalid image format' }, { status: 400 });
+      return NextResponse.json({ 
+        error: 'Invalid image format',
+        step: 'image_validation'
+      }, { status: 400 });
     }
     
     // Check file size (5MB limit)
@@ -237,9 +245,24 @@ export async function POST(request: NextRequest) {
     console.error('Error details:', error);
     console.error('Error message:', error instanceof Error ? error.message : 'Unknown error');
     console.error('Error stack:', error instanceof Error ? error.stack : 'No stack');
-    return NextResponse.json({ 
-      error: 'Upload failed', 
-      details: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 });
+    
+    // Return more specific error information
+    const errorResponse = {
+      error: 'Upload failed',
+      details: error instanceof Error ? error.message : 'Unknown error',
+      step: 'unknown',
+      timestamp: new Date().toISOString()
+    };
+    
+    // Add environment check to error response
+    errorResponse.envCheck = {
+      hasUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
+      hasServiceKey: !!process.env.SUPABASE_SERVICE_KEY,
+      serviceKeyLength: process.env.SUPABASE_SERVICE_KEY?.length || 0,
+      url: process.env.NEXT_PUBLIC_SUPABASE_URL ? 'SET' : 'MISSING',
+      serviceKey: process.env.SUPABASE_SERVICE_KEY ? 'SET' : 'MISSING'
+    };
+    
+    return NextResponse.json(errorResponse, { status: 500 });
   }
 } 
